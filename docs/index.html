@@ -74,7 +74,8 @@ tr.thin td{opacity:.45}
 .hint button{font:inherit; font-size:13px; background:var(--bg); color:var(--ink); border:1px solid var(--line); border-radius:999px; padding:4px 10px; cursor:pointer}
 .tblwrap{overflow-x:auto}
 .leaflet-container{font-family:var(--f-body)}
-@media (prefers-color-scheme: dark){ .leaflet-tile-pane{filter:brightness(.75) contrast(1.1)} }
+.basemap{filter:grayscale(.85) contrast(.95) brightness(1.04)}
+@media (prefers-color-scheme: dark){ .basemap{filter:grayscale(1) invert(.9) brightness(.85) contrast(.9)} }
 button:focus-visible, select:focus-visible, input:focus-visible{outline:2px solid var(--accent); outline-offset:1px}
 .loading{color:var(--muted); font-size:13px}
 footer.foot{font-size:12px; color:var(--muted); margin-top:28px; border-top:1px solid var(--line); padding-top:10px}
@@ -145,9 +146,9 @@ const MIN_AREA = 15, MIN_BLD = 3;
 
 // ---------- 지도
 const map = L.map('map', {zoomControl:true, preferCanvas:true}).setView([37.5565, 126.99], 12);
-L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-  maxZoom: 19, subdomains:'abcd',
-  attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
+L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  maxZoom: 19, className:'basemap',
+  attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
 }).addTo(map);
 const areaLayer = L.layerGroup().addTo(map);
 const bldLayer = L.layerGroup().addTo(map);
@@ -194,7 +195,9 @@ async function drawBuildings(){
   for(const r of rows){
     const o = r['o3'], s = r['s3'];
     const rate = o >= MIN_BLD ? s/o : null;
-    const c = L.circleMarker([r.lat, r.lon], {radius: 4 + Math.min(8, Math.sqrt(r.n)*1.6), color:'#fff', weight:1, fillColor: color3(rate), fillOpacity:.9});
+    const c = rate == null
+      ? L.circleMarker([r.lat, r.lon], {radius: 3, stroke:false, fillColor: color3(null), fillOpacity:.55})
+      : L.circleMarker([r.lat, r.lon], {radius: 4 + Math.min(8, Math.sqrt(r.n)*1.6), color:'#fff', weight:1, fillColor: color3(rate), fillOpacity:.92});
     c.on('click', e => { L.DomEvent.stopPropagation(e); showBuilding(r.jkey); });
     c.bindTooltip(esc(r.jkey.split('|')[1]) + ' · 가게 ' + r.n + '곳' + (rate!=null ? ' · 3년 생존 ' + Math.round(rate*100) + '%' : ''));
     c.addTo(bldLayer);
