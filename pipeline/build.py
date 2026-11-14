@@ -15,27 +15,42 @@ TODAY = dt.date.today()
 HORIZON = 1095
 KEEP_FROM = dt.date(2016, 1, 1)
 
-SVC_NM = {'CS100001': '한식', 'CS100002': '중식', 'CS100003': '일식', 'CS100004': '양식', 'CS100005': '제과',
-          'CS100006': '패스트푸드', 'CS100007': '치킨', 'CS100008': '분식', 'CS100009': '호프·주점', 'CS100010': '커피·음료'}
+# 업종 분류: 업태가 분명하면 업태로, 애매하면(기타·호프/통닭·일반조리판매·백화점 등) 상호명 키워드로.
+# 편의점·출장조리·푸드트럭·키즈카페처럼 '가게 자리' 비교에 맞지 않는 업태는 None(통계 제외).
+KW = [  # 순서가 우선순위
+    ('치킨', r'치킨|통닭|닭강정|교촌|굽네|BBQ|비비큐|bhc|BHC|네네|페리카나|처갓집|호식이|푸라닭|자담|멕시카나|노랑|가마로|또래오래|깐부|순살'),
+    ('패스트푸드', r'버거|맥도날드|롯데리아|KFC|맘스터치|서브웨이|피자|도미노|파파존스|토스트|핫도그|타코야끼'),
+    ('제과', r'베이커리|빵|제과|케이크|케익|도넛|도너츠|마카롱|아이스크림|배스킨|베스킨|와플|크로플|젤라또|빙수|설빙|떡집|디저트'),
+    ('호프·주점', r'호프|포차|포장마차|주점|술집|이자카야|맥주|비어|펍|PUB|Pub|pub|와인|막걸리|노가리|소주|선술집|BAR|Bar|[가-힣]바$|칵테일|하이볼|위스키|요리주점|꼬치|야끼토리|kitchen bar'),
+    ('커피·음료', r'커피|카페|까페|cafe|Cafe|CAFE|coffee|Coffee|COFFEE|스타벅스|이디야|투썸|메가엠지씨|컴포즈|빽다방|공차|쥬스|주스|버블티|티하우스|찻집|다방|로스터'),
+    ('분식', r'분식|떡볶이|떡볶기|김밥|순대|라면|만두|어묵|오뎅|도시락|컵밥|주먹밥|호떡|핫바'),
+    ('일식', r'스시|초밥|라멘|돈까스|돈가스|돈카츠|우동|소바|오마카세|사케|덮밥|규동|텐동|일식'),
+    ('중식', r'짜장|자장|짬뽕|마라|반점|중화|훠궈|양꼬치|딤섬|중국'),
+    ('양식', r'파스타|스테이크|비스트로|브런치|타코|쌀국수|태국|타이|베트남|인도|커리|카레|멕시칸|이탈리|프렌치|샐러드|포케|그릴|화덕|키친|다이닝|오스테리아|트라토리아|뇨끼|리조또'),
+    ('한식', r'국밥|고기|삼겹|갈비|곱창|막창|족발|보쌈|찌개|해장|백반|칼국수|냉면|감자탕|횟집|수산|회센터|닭갈비|막국수|한우|정육|식당|한식|생선|아구|추어탕|설렁탕|곰탕|해물|낙지|쭈꾸미|쌈밥|부대|찜닭|닭한마리|국수|죽|반찬|비빔밥|두부|전집|한정식|숯불|대패|닭발|밥집|된장|샤브|순두부|보리밥|장어|오리|순대국|육회|불고기|전골'),
+]
+KW = [(n, re.compile(p)) for n, p in KW]
+EXCLUDE = ('편의점', '출장조리', '푸드트럭', '키즈카페', '식품소분', '룸살롱', '유원지', '고속도로', '공항', '극장', '관광호텔', '철도역')
+CLEAR = {'한식': '한식', '식육(숯불구이)': '한식', '탕류(보신용)': '한식', '냉면집': '한식', '횟집': '한식', '복어취급': '한식',
+         '중국식': '중식', '일식': '일식', '경양식': '양식', '외국음식전문점(인도,태국등)': '양식', '뷔페식': '양식', '패밀리레스트랑': '양식',
+         '분식': '분식', '김밥(도시락)': '분식', '패스트푸드': '패스트푸드', '통닭(치킨)': '치킨',
+         '정종/대포집/소주방': '호프·주점', '감성주점': '호프·주점', '라이브카페': '호프·주점',
+         '커피숍': '커피·음료', '까페': '커피·음료', '다방': '커피·음료', '전통찻집': '커피·음료', '떡카페': '커피·음료', '아이스크림': '제과'}
 
-def svc(biz, kind):
-    b = biz or ''
-    if kind == '휴게':
-        if any(k in b for k in ('커피', '까페', '카페', '다방', '전통찻집', '기타 휴게')): return 'CS100010'
-        if '패스트' in b: return 'CS100006'
-        if '분식' in b or '김밥' in b: return 'CS100008'
-        if '아이스크림' in b or '제과' in b: return 'CS100005'
-        return 'CS100010'
-    if '한식' in b or '식육' in b or '탕류' in b or '냉면' in b or '횟집' in b or '복어' in b: return 'CS100001'
-    if '중국' in b: return 'CS100002'
-    if '일식' in b: return 'CS100003'
-    if '경양식' in b or '외국' in b or '뷔페' in b: return 'CS100004'
-    if '패스트' in b: return 'CS100006'
-    if '통닭' in b or '치킨' in b: return 'CS100007'
-    if '분식' in b or '김밥' in b: return 'CS100008'
-    if '호프' in b or '정종' in b or '감성주점' in b or '라이브' in b: return 'CS100009'
-    if '까페' in b or '커피' in b: return 'CS100010'
+def by_name(name):
+    for n, p in KW:
+        if p.search(name or ''): return n
     return None
+
+def svc(biz, kind, name=''):
+    b = (biz or '').strip()
+    if any(x in b for x in EXCLUDE): return None
+    if b in CLEAR: return CLEAR[b]
+    hit = by_name(name)
+    if b == '호프/통닭': return hit if hit and hit not in ('커피·음료', '제과') else '호프·주점'
+    if hit: return hit
+    if kind == '휴게' and b in ('기타 휴게음식점', ''): return '커피·음료'
+    return '기타'
 
 FOOD_WORDS = ('음식점', '분식점', '제과점', '주점', '상점', '반점', '식당점', '정육점')
 def is_chain(name):
@@ -125,7 +140,7 @@ def process_gu(gu, areas, idx, wl, wc):
             name = (r['사업장명'] or '').strip()
             jib, road = (r['지번주소'] or '').strip(), (r['도로명주소'] or '').strip()
             stores.append(dict(id=r['관리번호'].strip(), gu=gu, kind=kind, name=name, biz=(r['업태구분명'] or '').strip(),
-                               svc=svc(r['업태구분명'], kind), open=o, close=c, status=status, jibun=jib, road=road,
+                               svc=svc(r['업태구분명'], kind, r['사업장명']), open=o, close=c, status=status, jibun=jib, road=road,
                                jkey=jkey(jib), size=float(sz) if re.match(r'^[0-9.]+$', sz) and float(sz) > 0 else None,
                                floor=floor_of(road, jib), chain=is_chain(name), lat=lat, lon=lon, area=area))
     seen = set(); uniq = []
@@ -150,13 +165,13 @@ def process_gu(gu, areas, idx, wl, wc):
 
     nc = 0
     for s in stores:
-        wl.writerow([s['id'], gu, s['kind'], s['name'], s['biz'], SVC_NM.get(s['svc'], ''), s['open'], s['close'] or '',
+        wl.writerow([s['id'], gu, s['kind'], s['name'], s['biz'], s['svc'] or '', s['open'], s['close'] or '',
                      s['status'], s['jibun'], s['road'], s['jkey'] or '', s['size'] or '', s['floor'],
                      't' if s['chain'] else 'f', s['lat'] or '', s['lon'] or '', s['area'] or '',
                      (s['close'] - s['open']).days if s['close'] and not continued(s) else '',
                      'f' if continued(s) else 't'])
         if s['svc'] and s['open'] >= KEEP_FROM and (TODAY - s['open']).days > HORIZON:
-            wc.writerow([s['id'], gu, s['area'] or '', SVC_NM[s['svc']], size_band(s['size']), s['floor'],
+            wc.writerow([s['id'], gu, s['area'] or '', s['svc'], size_band(s['size']), s['floor'],
                          't' if s['chain'] else 'f', spot(s), 't' if died(s) else 'f', s['open']]); nc += 1
     print(f'{gu}: 인허가 {len(stores):,}  코호트 {nc:,}', flush=True)
 
