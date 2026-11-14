@@ -16,11 +16,12 @@ create temp table s_area (like area) on commit drop;
 \copy s_area from 'data/out/area.csv' with (format csv, header true)
 delete from cohort where gu in (select distinct gu from s_license);
 delete from license where gu in (select distinct gu from s_license);
-insert into license (id,gu,kind,name,biz_type,svc,open_date,close_date,status,jibun,road,jkey,size_m2,floor,chain,lat,lon,area_code)
-  select id,gu,kind,name,biz_type,nullif(svc,''),open_date,close_date,status,jibun,road,nullif(jkey,''),size_m2,floor,chain,lat,lon,nullif(area_code,'') from s_license;
+insert into license (id,gu,kind,name,biz_type,svc,open_date,close_date,status,jibun,road,jkey,size_m2,floor,chain,lat,lon,area_code,life_days,stat)
+  select id,gu,kind,name,biz_type,nullif(svc,''),open_date,close_date,status,jibun,road,nullif(jkey,''),size_m2,floor,chain,lat,lon,nullif(area_code,''),life_days,stat from s_license;
 insert into cohort select license_id,gu,nullif(area_code,''),svc,size_band,floor,chain,spot,died,open_date from s_cohort;
-insert into area select * from s_area on conflict (code) do update set name=excluded.name, kind=excluded.kind, gu=excluded.gu, geom=excluded.geom;
+insert into area select * from s_area on conflict (code) do update set name=excluded.name, kind=excluded.kind, gu=excluded.gu, geom=excluded.geom, lat=excluded.lat, lon=excluded.lon;
 insert into meta values ('build', '$META'::jsonb, now()) on conflict (key) do update set value=excluded.value, updated_at=now();
+select refresh_stats();
 commit;
 SQL
 bash ./db.sh -q -f data/tmp/load.sql

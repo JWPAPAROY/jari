@@ -94,7 +94,7 @@ def find_area(areas, idx, x, y):
            and geo.point_in_rings(x, y, areas[i]['rings'])]
     return min(hit, key=lambda a: a['area'])['code'] if hit else None
 
-def ring_latlon(ring, tol=8.0):
+def ring_latlon(ring, tol=12.0):
     out, last = [], None
     for x, y in ring:
         if last and abs(x - last[0]) < tol and abs(y - last[1]) < tol: continue
@@ -137,11 +137,13 @@ def process_gu(gu, areas, idx, wl, wc):
     by_name = collections.defaultdict(list); by_jibun = collections.defaultdict(list)
     for s in stores:
         by_name[(s['jibun'], s['name'])].append(s); by_jibun[s['jibun']].append(s)
+    def continued(s):   # 같은 자리·같은 상호가 60일 안에 다시 열림 = 명의변경(영업이 이어진 것)
+        if not s['close']: return False
+        return any(t is not s and t['open'] >= s['close'] and (t['open'] - s['close']).days <= 60
+                   for t in by_name[(s['jibun'], s['name'])])
     def died(s):
         if not s['close'] or (s['close'] - s['open']).days >= HORIZON: return False
-        for t in by_name[(s['jibun'], s['name'])]:   # 같은 자리·같은 상호 60일 안 재개업 = 명의변경
-            if t is not s and t['open'] >= s['close'] and (t['open'] - s['close']).days <= 60: return False
-        return True
+        return not continued(s)
     def spot(s):
         lo = s['open'] - dt.timedelta(days=HORIZON)
         return min(2, sum(1 for t in by_jibun[s['jibun']] if t is not s and t['close'] and lo <= t['close'] <= s['open'] and t['name'] != s['name']))
@@ -150,7 +152,9 @@ def process_gu(gu, areas, idx, wl, wc):
     for s in stores:
         wl.writerow([s['id'], gu, s['kind'], s['name'], s['biz'], SVC_NM.get(s['svc'], ''), s['open'], s['close'] or '',
                      s['status'], s['jibun'], s['road'], s['jkey'] or '', s['size'] or '', s['floor'],
-                     't' if s['chain'] else 'f', s['lat'] or '', s['lon'] or '', s['area'] or ''])
+                     't' if s['chain'] else 'f', s['lat'] or '', s['lon'] or '', s['area'] or '',
+                     (s['close'] - s['open']).days if s['close'] and not continued(s) else '',
+                     'f' if continued(s) else 't'])
         if s['svc'] and s['open'] >= KEEP_FROM and (TODAY - s['open']).days > HORIZON:
             wc.writerow([s['id'], gu, s['area'] or '', SVC_NM[s['svc']], size_band(s['size']), s['floor'],
                          't' if s['chain'] else 'f', spot(s), 't' if died(s) else 'f', s['open']]); nc += 1
@@ -161,14 +165,18 @@ if __name__ == '__main__':
     os.makedirs(OUT, exist_ok=True)
     areas = load_areas(); idx = grid_index(areas)
     with open(f'{OUT}/area.csv', 'w', encoding='utf-8', newline='') as fh:
-        w = csv.writer(fh); w.writerow(['code', 'name', 'kind', 'gu', 'geom'])
+        w = csv.writer(fh); w.writerow(['code', 'name', 'kind', 'gu', 'geom', 'lat', 'lon'])
         GU_CD = {'11110': '종로구', '11140': '중구', '11170': '용산구', '11200': '성동구', '11215': '광진구', '11230': '동대문구',
                  '11260': '중랑구', '11290': '성북구', '11305': '강북구', '11320': '도봉구', '11350': '노원구', '11380': '은평구',
                  '11410': '서대문구', '11440': '마포구', '11470': '양천구', '11500': '강서구', '11530': '구로구', '11545': '금천구',
                  '11560': '영등포구', '11590': '동작구', '11620': '관악구', '11650': '서초구', '11680': '강남구', '11710': '송파구', '11740': '강동구'}
         for a in areas:
+            rings = [ring_latlon(r) for r in a['rings']]
+            pts = max(rings, key=len) if rings else []
+            clat = sum(p[1] for p in pts) / len(pts) if pts else ''
+            clon = sum(p[0] for p in pts) / len(pts) if pts else ''
             w.writerow([a['code'], a['name'], a['kind'], GU_CD.get(a['gu_cd'], a['gu_cd']),
-                        json.dumps([ring_latlon(r) for r in a['rings']], separators=(',', ':'))])
+                        json.dumps(rings, separators=(',', ':')), clat, clon])
     print('상권', len(areas), flush=True)
     with open(f'{OUT}/license.csv', 'w', encoding='utf-8', newline='') as fl, open(f'{OUT}/cohort.csv', 'w', encoding='utf-8', newline='') as fc:
         wl, wc = csv.writer(fl), csv.writer(fc)
