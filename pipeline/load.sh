@@ -23,5 +23,5 @@ insert into area select * from s_area on conflict (code) do update set name=excl
 insert into meta values ('build', '$META'::jsonb, now()) on conflict (key) do update set value=excluded.value, updated_at=now();
 commit;
 SQL
-./db.sh -q -f data/tmp/load.sql
-./db.sh -tAc "select 'license '||count(*) from license union all select 'cohort '||count(*) from cohort union all select 'area '||count(*) from area"
+bash ./db.sh -q -f data/tmp/load.sql
+bash ./db.sh -tAc "select 'license '||count(*) from license union all select 'cohort '||count(*) from cohort union all select 'area '||count(*) from area"
