@@ -1,0 +1,32 @@
+name: refresh-data
+# 매주 월요일 03:00 KST: LOCALDATA·상권 영역 내려받기 → 가공 → Supabase 적재
+on:
+  schedule:
+    - cron: "0 18 * * 0"
+  workflow_dispatch:
+    inputs:
+      gus:
+        description: "구 이름(공백 구분). 비우면 서울 25개 구 전체"
+        required: false
+        default: ""
+concurrency: refresh-data
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install psql
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client
+      - name: Fetch
+        run: python -I pipeline/fetch.py ${{ github.event.inputs.gus }}
+      - name: Build
+        run: python -I pipeline/build.py ${{ github.event.inputs.gus }}
+      - name: Load
+        env:
+          JARI_DB_PASSWORD: ${{ secrets.JARI_DB_PASSWORD }}
+          PSQL: psql
+        run: bash pipeline/load.sh
