@@ -16,12 +16,13 @@
   --accent:#1f5f7a; --accent-soft:#e2eef3;
   --risk:#b4342b; --risk-soft:#f7e3e1; --safe:#2c7a4b; --safe-soft:#e1f1e7; --mid:#8a6d1d;
   --c1:#c0392b; --c2:#e07b4f; --c3:#e9c46a; --c4:#7fb77e; --c5:#2c7a4b; --cna:#b8c2c8;
+  --t1:#c0392b; --t2:#e8a089; --t3:#d5d9dc; --t4:#7aa7d6; --t5:#1f5fa8;
   --f-body:"IBM Plex Sans KR","Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;
   --f-num:"IBM Plex Mono",ui-monospace,Consolas,monospace;
 }
 @media (prefers-color-scheme: dark){:root{
   --bg:#11181d; --panel:#182229; --ink:#e4ebef; --muted:#93a3ad; --line:#2a3842;
-  --accent:#6fb3cf; --accent-soft:#1d3440; --risk:#ec7a70; --risk-soft:#3a2120; --safe:#6cc58f; --safe-soft:#1b3326; --mid:#d6b45a; --cna:#4a5862; color-scheme:dark}}
+  --accent:#6fb3cf; --accent-soft:#1d3440; --risk:#ec7a70; --risk-soft:#3a2120; --safe:#6cc58f; --safe-soft:#1b3326; --mid:#d6b45a; --cna:#4a5862; --t1:#e0675b; --t2:#9a5a4e; --t3:#56636c; --t4:#4f7fae; --t5:#7fb4ee; color-scheme:dark}}
 *{box-sizing:border-box}
 html,body{height:100%}
 body{margin:0; background:var(--bg); color:var(--ink); font:15px/1.55 var(--f-body)}
@@ -121,6 +122,14 @@ dl.facts dd{margin:0}
 .legend-inline{font-size:12px; color:var(--muted)}
 .legend-inline i{display:inline-block; width:10px; height:10px; border-radius:2px; margin:0 4px 0 10px; vertical-align:-1px}
 .good{color:var(--safe)} .bad{color:var(--risk)}
+.grade{display:inline-block; font-size:12px; font-weight:700; padding:2px 8px; border-radius:999px; color:#fff; white-space:nowrap}
+.flagchip{display:inline-block; font-size:11px; padding:1px 6px; border-radius:4px; background:var(--bg); color:var(--mid); border:1px solid var(--line); white-space:nowrap}
+.kpis{display:grid; grid-template-columns:repeat(2,1fr); gap:8px; margin-top:10px}
+.kpis div{background:var(--bg); border-radius:8px; padding:9px 10px}
+.kpis b{display:block; font-family:var(--f-num); font-size:20px; line-height:1.2}
+.kpis small{color:var(--muted); font-size:12px}
+tr.go{cursor:pointer} tr.go:hover td{background:var(--accent-soft)}
+.panel-ctl{display:flex; gap:6px; flex-wrap:wrap; margin:8px 0 0}
 </style>
 </head>
 <body>
@@ -131,12 +140,13 @@ dl.facts dd{margin:0}
     <div class="results" id="results" hidden></div>
   </div>
   <div class="ctl">
+    <div class="seg" id="mode" role="group" aria-label="보기"><button type="button" data-m="surv" aria-pressed="true">생존율</button><button type="button" data-m="trend" aria-pressed="false">뜨는 상권</button></div>
     <select id="svc" aria-label="업종">
       <option value="전체">모든 업종</option>
       <option>한식</option><option>커피·음료</option><option>호프·주점</option><option>분식</option><option>양식</option>
       <option>일식</option><option>중식</option><option>치킨</option><option>제과</option><option>패스트푸드</option><option value="기타">기타(분류 어려움)</option>
     </select>
-    <div class="seg" role="group" aria-label="기준 기간">
+    <div class="seg" id="yrs" role="group" aria-label="기준 기간">
       <button type="button" data-y="1" aria-pressed="false">1년</button>
       <button type="button" data-y="2" aria-pressed="false">2년</button>
       <button type="button" data-y="3" aria-pressed="true">3년</button>
@@ -175,7 +185,7 @@ async function rpc(fn, body){
   if(!r.ok) throw new Error(r.status); return r.json();
 }
 
-const state = {svc:'전체', y:3, sel:null};
+const state = {svc:'전체', y:3, sel:null, mode:'surv'};
 const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
 // 생존율 → 색 (연차별 구간)
 const BINS = {1:[.72,.79,.85,.9], 2:[.55,.64,.72,.8], 3:[.45,.55,.63,.72]};
@@ -249,6 +259,12 @@ const legend = L.control({position:'bottomleft'});
 legend.onAdd = () => { const d = L.DomUtil.create('div','legend' + (MOBILE() ? ' closed' : '')); d.id = 'legend'; L.DomEvent.disableClickPropagation(d); d.addEventListener('click', () => d.classList.toggle('closed')); return d; };
 legend.addTo(map);
 function drawLegend(){
+  if(state.mode === 'trend'){
+    $('legend').innerHTML = '<b>뜨는 상권</b> · '+esc(trendSvc() === '전체' ? '음식점·카페' : trendSvc())+'<div class="rows">' +
+      [['--t5','뜨는 중 (상위 20%)'],['--t4',''],['--t3','보합'],['--t2',''],['--t1','식는 중 (하위 20%)'],['--cna','자료 부족 · 개업 거의 없음']]
+      .map(([c,t]) => '<i style="background:'+css(c)+'"></i>'+t).join('<br>') + '<br><span class="note">매출 1년·유동인구 1년·가게 수 3년 변화</span></div>';
+    return;
+  }
   const b = BINS[state.y], p = x => Math.round(x*100);
   $('legend').innerHTML = '<b>'+state.y+'년 생존율</b> · '+esc(state.svc==='전체'?'모든 업종':state.svc)+'<div class="rows">'+
     [['--c5','≥'+p(b[3])+'%'],['--c4',p(b[2])+'~'+p(b[3])+'%'],['--c3',p(b[1])+'~'+p(b[2])+'%'],['--c2',p(b[0])+'~'+p(b[1])+'%'],['--c1','<'+p(b[0])+'%'],['--cna','표본 부족']]
@@ -263,17 +279,36 @@ async function loadStats(){
   const rows = await rest('area_stats?select=code,o1,s1,o2,s2,o3,s3,med_days&svc=eq.' + encodeURIComponent(state.svc), true);
   STATS = new Map(rows.map(r => [r.code, r]));
 }
+let TREND = new Map(), trendFor = null;
+const trendSvc = () => state.svc === '기타' ? '전체' : state.svc;   // '기타'는 서울시 매출 업종에 없음
+async function loadTrend(){
+  const sv = trendSvc(); if(trendFor === sv) return;
+  const rows = await rest('area_trend?select=code,score,grade,flag,sales_yoy,sales_3y,flpop_yoy,store_3y,n_now,n_3y,ix_nm&svc=eq.' + encodeURIComponent(sv), true);
+  TREND = new Map(rows.map(r => [r.code, r])); trendFor = sv;
+}
+function tcolor(t){
+  if(!t || t.score == null || t.flag === '개업 거의 없음') return css('--cna');
+  const v = t.score; return css(v < .2 ? '--t1' : v < .4 ? '--t2' : v < .6 ? '--t3' : v < .8 ? '--t4' : '--t5');
+}
+const sgn = x => x == null ? '—' : (x >= 0 ? '+' : '') + Math.round(x*100) + '%';
 function rateOf(r){ if(!r) return null; const o = r['o'+state.y], s = r['s'+state.y]; return o >= MIN_AREA ? s/o : null; }
 function drawAreas(){
   areaLayer.clearLayers();
   for(const a of AREAS){
     if(!a.geom) continue;
-    const st = STATS.get(a.code), rate = rateOf(st);
+    let c, tip;
+    if(state.mode === 'trend'){
+      const t = TREND.get(a.code); c = tcolor(t);
+      tip = esc(a.name) + (t && t.score != null ? ' · ' + esc(t.grade) + ' · 매출 ' + sgn(t.sales_yoy) : '') + (t && t.flag ? ' · ' + esc(t.flag) : '');
+    } else {
+      const rate = rateOf(STATS.get(a.code)); c = color(rate);
+      tip = esc(a.name) + (rate != null ? ' · ' + Math.round(rate*100) + '%' : '');
+    }
     const poly = L.polygon(a.geom.map(r => r.map(([x,y]) => [y,x])), {
-      color: color(rate), weight: 1, fillColor: color(rate), fillOpacity: map.getZoom() >= 16 ? .12 : .45
+      color: c, weight: 1, fillColor: c, fillOpacity: map.getZoom() >= 16 ? .12 : .45
     });
     poly.on('click', e => { L.DomEvent.stopPropagation(e); showArea(a.code); });
-    poly.bindTooltip(esc(a.name) + (rate != null ? ' · ' + Math.round(rate*100) + '%' : ''), {sticky:true});
+    poly.bindTooltip(tip, {sticky:true});
     poly.addTo(areaLayer);
   }
 }
@@ -460,9 +495,49 @@ function detailHtml(d, where){
   return h;
 }
 
+// ---------- 상권 흐름 (서울시 상권분석서비스 분기 자료)
+const IX = {'다이나믹':'새 가게가 많이 들어오고 빨리 바뀌는 상권', '상권확장':'새 가게가 늘고 기존 가게도 버티는, 커지는 상권',
+            '상권축소':'새로 연 가게가 빨리 닫는, 줄어드는 상권', '정체':'가게가 오래 머물고 변화가 적은 상권'};
+const GRADE_C = {'뜨는 중':'--t5', '보합':'--muted', '식는 중':'--t1'};
+const qlab = q => String(q).slice(2,4) + '.' + String(q).slice(4) + 'Q';
+function qChart(pts, name, cv){
+  pts = pts.filter(x => x.v > 0); if(pts.length < 4) return '';
+  const W = 360, H = 90, P = 6, max = Math.max(...pts.map(x => x.v)), min = Math.min(...pts.map(x => x.v)) * .9;
+  const X = i => P + i * (W - 2*P) / (pts.length - 1), Y = v => H - 16 - (v - min) / (max - min || 1) * (H - 26);
+  const d = pts.map((x,i) => (i ? 'L' : 'M') + X(i).toFixed(1) + ' ' + Y(x.v).toFixed(1)).join(' ');
+  const dots = pts.map((x,i) => '<circle cx="'+X(i).toFixed(1)+'" cy="'+Y(x.v).toFixed(1)+'" r="2.2" fill="'+css(cv)+'"><title>'+qlab(x.q)+'</title></circle>').join('');
+  const labs = pts.map((x,i) => (i % 4 === 0 || i === pts.length-1) ? '<text x="'+X(i).toFixed(1)+'" y="'+(H-2)+'" font-size="10" text-anchor="middle" fill="'+css('--muted')+'">'+qlab(x.q)+'</text>' : '').join('');
+  return '<p class="note" style="margin:10px 0 0">'+name+' <span class="note">(분기별, 위아래 폭은 이 상권 안에서의 상대값)</span></p><svg class="spark" viewBox="0 0 '+W+' '+H+'" role="img" aria-label="'+name+' 분기 추이"><path d="'+d+'" fill="none" stroke="'+css(cv)+'" stroke-width="2"/>'+dots+labs+'</svg>';
+}
+function trendHtml(tr, sv){
+  if(!tr || !tr.t) return '<h2>상권 흐름</h2><p class="note">서울시 상권분석서비스 매출·유동인구 자료가 없는 상권입니다.</p>';
+  const t = tr.t, sh = (a,b) => a && b ? a/b : null;
+  const y1 = sh(t.y_now, t.s_now), y0 = sh(t.y_prev, t.s_prev);
+  let h = '<h2>상권 흐름 <span class="note">· '+esc(sv === '전체' ? '음식점·카페' : sv)+' · '+qlab(t.q_last)+'까지</span></h2>';
+  h += '<p style="margin:0">' + (t.grade ? '<span class="grade" style="background:'+css(GRADE_C[t.grade])+'">'+esc(t.grade)+'</span> ' : '') +
+       (t.score != null ? '<span class="note">서울 상권 중 상위 '+Math.max(1, Math.round((1 - t.score) * 100))+'%</span> ' : '<span class="note">비교할 자료가 부족합니다</span> ') +
+       (t.flag ? '<span class="flagchip">'+esc(t.flag)+'</span>' : '') + '</p>';
+  h += '<div class="kpis">' +
+    '<div><small>매출 1년 변화</small><b>'+sgn(t.sales_yoy)+'</b><small>3년 '+sgn(t.sales_3y)+'</small></div>' +
+    '<div><small>유동인구 1년 변화</small><b>'+sgn(t.flpop_yoy)+'</b><small>3년 '+sgn(t.f_3y ? t.f_now/t.f_3y - 1 : null)+'</small></div>' +
+    '<div><small>영업 중 가게 수</small><b>'+fmt(t.n_now)+'곳</b><small>3년 전 '+fmt(t.n_3y)+'곳 ('+sgn(t.store_3y)+')</small></div>' +
+    '<div><small>20·30대 매출 비중</small><b>'+(y1 != null ? Math.round(y1*100)+'%' : '—')+'</b><small>1년 전 '+(y0 != null ? Math.round(y0*100)+'%' : '—')+'</small></div></div>';
+  if(t.ix_nm) h += '<p class="note" style="margin:8px 0 0">서울시 상권변화지표: <b>'+esc(t.ix_nm)+'</b> — '+esc(IX[t.ix_nm] || '')+'</p>';
+  h += qChart(tr.sa.map(x => ({q:x.q, v:x.amt})), '추정매출', '--accent') + qChart(tr.aq.map(x => ({q:x.q, v:x.flpop})), '유동인구', '--mid');
+  h += '<p class="note">매출은 서울시가 카드 결제로 추정한 값이라 물가 상승분이 섞여 있습니다. 계절 차이가 있어 같은 분기끼리(1년 전과) 비교합니다.</p>';
+  return h;
+}
+
 // ---------- 한눈에 보기: 숫자에서 문장 뽑기 (표본이 충분할 때만)
-function takeaways({bld, near, d, L, turn, where}){
+function takeaways({bld, near, d, L, turn, where, tr}){
   const out = [], r = (s,o) => o ? s/o : null, P = x => Math.round(x*100) + '%';
+  if(tr && tr.score != null){
+    const g = tr.grade === '뜨는 중' ? '<b class="good">뜨는 중</b>' : tr.grade === '식는 중' ? '<b class="bad">식는 중</b>' : '<b>보합</b>';
+    out.push('최근 1년 매출 <b>'+sgn(tr.sales_yoy)+'</b>, 유동인구 <b>'+sgn(tr.flpop_yoy)+'</b>, 3년 사이 가게 수 <b>'+sgn(tr.store_3y)+'</b>로 서울 상권 중 '+g+'(상위 '+Math.max(1, Math.round((1 - tr.score)*100))+'%)입니다.');
+    if(tr.sales_yoy != null && tr.store_3y != null && tr.sales_yoy > .05 && tr.store_3y < -.05) out.push('가게는 줄었는데 매출은 늘어, 남은 가게 한 곳당 매출이 커졌을 가능성이 있습니다.');
+    if(tr.sales_yoy != null && tr.store_3y != null && tr.sales_yoy < -.05 && tr.store_3y > .1) out.push('가게는 늘었는데 매출은 줄어, <b class="bad">한 곳당 몫이 작아지는</b> 경쟁 과열 신호일 수 있습니다.');
+  }
+  if(tr && tr.flag === '개업 거의 없음') out.push('3년 사이 가게가 크게 줄었는데 새로 연 가게가 거의 없습니다. 재개발·철거 계획이 있는지 먼저 확인하세요.');
   const noun = x => esc(x.g === 'chain' ? (x.k === '프랜차이즈' ? '프랜차이즈 가게' : x.k) : x.k + ' 가게');
   if(bld && near && bld.o3 >= 5 && near.o3 >= 30){
     const a = r(bld.s3, bld.o3), b = r(near.s3, near.o3);
@@ -508,7 +583,34 @@ function turnover(hist){
 let panelTok = 0;
 
 // ---------- 처음 화면
+const KINDS = ['전체','발달상권','골목상권','전통시장','관광특구'];
+let homeKind = '전체';
+function trendRow(t){
+  const a = AREAS.find(x => x.code === t.code) || {};
+  return '<tr class="go" data-code="'+esc(t.code)+'"><td>'+esc(a.name)+'<br><span class="note">'+esc(a.gu||'')+' · '+esc(a.kind||'')+'</span>'+(t.flag ? ' <span class="flagchip">'+esc(t.flag)+'</span>' : '')+'</td>' +
+    '<td class="r num">'+sgn(t.sales_yoy)+'</td><td class="r num">'+sgn(t.flpop_yoy)+'</td><td class="r num">'+sgn(t.store_3y)+'</td></tr>';
+}
+const TREND_HEAD = '<div class="tblwrap"><table><thead><tr><th>상권</th><th class="r">매출<br>1년</th><th class="r">유동인구<br>1년</th><th class="r">가게 수<br>3년</th></tr></thead><tbody>';
+async function showTrendHome(){
+  state.sel = null; const tok = ++panelTok;
+  $('panel').innerHTML = '<p class="loading">불러오는 중…</p>';
+  await loadTrend(); if(tok !== panelTok) return;
+  const kindOf = c => (AREAS.find(x => x.code === c) || {}).kind;
+  const all = [...TREND.values()].filter(t => t.score != null && (homeKind === '전체' || kindOf(t.code) === homeKind));
+  const up = all.filter(t => t.flag !== '개업 거의 없음').sort((a,b) => b.score - a.score).slice(0, 15);
+  const down = all.sort((a,b) => a.score - b.score).slice(0, 10);
+  const nFlag = [...TREND.values()].filter(t => t.flag === '개업 거의 없음').length;
+  $('panel').innerHTML = '<h1>어디가 뜨고 있나</h1><p class="sub">'+esc(trendSvc() === '전체' ? '음식점·카페' : trendSvc())+' 기준 · 최근 4개 분기를 1년 전과 비교 · 지도 색과 같습니다</p>' +
+    '<div class="panel-ctl seg" role="group" aria-label="상권 유형">' + KINDS.map(k => '<button type="button" data-k="'+k+'" aria-pressed="'+(k === homeKind)+'">'+(k === '전체' ? '모든 유형' : k)+'</button>').join('') + '</div>' +
+    '<h2>뜨는 상권</h2>' + TREND_HEAD + up.map(trendRow).join('') + '</tbody></table></div>' +
+    '<h2>식는 상권</h2>' + TREND_HEAD + down.map(trendRow).join('') + '</tbody></table></div>' +
+    '<p class="note">순위는 같은 업종 상권들 사이에서 <b>매출 1년 변화</b>, <b>유동인구 1년 변화</b>, <b>영업 중 가게 수 3년 변화</b>의 백분위를 평균한 것입니다. 매출은 카드 결제 기반 추정치(물가 상승 포함)라 절대 금액보다 변화 방향을 보세요.</p>' +
+    '<p class="note"><span class="flagchip">개업 거의 없음</span> 3년 사이 가게가 30% 넘게 줄었는데 새로 연 가게가 거의 없는 곳('+nFlag+'곳)입니다. 재개발·철거 등 상권 밖 사정일 수 있어 뜨는 순위에서 뺐습니다. <span class="flagchip">손바뀜 많음</span> 1년 동안 열고 닫은 가게가 영업 중 가게의 60%를 넘는 곳으로, 팝업·단기 매장이 많아 숫자가 들쭉날쭉합니다.</p>' + FOOT;
+  $('panel').querySelectorAll('[data-k]').forEach(b => b.onclick = () => { homeKind = b.dataset.k; showTrendHome(); });
+  $('panel').querySelectorAll('tr[data-code]').forEach(r => r.onclick = () => showArea(r.dataset.code));
+}
 async function showHome(){
+  if(state.mode === 'trend') return showTrendHome();
   const rows = await rpc('seoul_stats', {});
   const all = rows.find(r => r.svc === '전체') || {};
   $('panel').innerHTML = '<h1>서울 음식점·카페, 몇 년 버텼나</h1><p class="sub">2016년 이후 문을 연 가게 기준 · 주소나 상권을 검색하거나 지도를 눌러 보세요</p>' +
@@ -531,13 +633,23 @@ async function showArea(code){
     (all.med_days ? '<p class="sub">문 닫은 가게의 영업 기간 중앙값 <b class="num">'+(all.med_days/365).toFixed(1)+'년</b></p>' : '') +
     survBlock(all, '이 상권 전체') + '<div id="tk"></div>' +
     (best ? '<p class="note" style="margin-top:10px">이 상권에서 3년을 가장 잘 버틴 업종은 <b>'+esc(best.svc)+'</b>('+pct(best.s3,best.o3)+', '+best.o3+'곳 중)입니다.</p>' : '') +
+    '<div id="tr"><p class="loading">매출·유동인구 흐름 불러오는 중…</p></div>' +
     '<h2>업종별 생존율</h2>' + svcTable(rows, 10) + '<div id="dt"><p class="loading">조건별 통계 불러오는 중…</p></div>' + FOOT;
   if(a.lat) map.flyTo([a.lat, a.lon], Math.max(map.getZoom(), 15), {duration:.6});
   toPanel();
-  const d = await rpc('place_detail', {p_lat:0, p_lon:0, p_r:0, p_svc:state.svc, p_area:code}).catch(() => null);
+  const sv = trendSvc();
+  const [d, tr] = await Promise.all([
+    rpc('place_detail', {p_lat:0, p_lon:0, p_r:0, p_svc:state.svc, p_area:code}).catch(() => null),
+    Promise.all([
+      rest('area_trend?select=*&code=eq.' + code + '&svc=eq.' + encodeURIComponent(sv)),
+      rest('area_sales?select=q,amt,a2030&code=eq.' + code + '&svc=eq.' + encodeURIComponent(sv) + '&order=q'),
+      rest('area_q?select=q,flpop,ix_nm&code=eq.' + code + '&order=q')
+    ]).then(([t, sa, aq]) => ({t: t[0], sa, aq})).catch(() => null)
+  ]);
   if(tok !== panelTok) return;
   $('dt').innerHTML = detailHtml(d, '이 상권');
-  $('tk').innerHTML = takeaways({d, where:'이 상권'});
+  $('tr').innerHTML = trendHtml(tr, sv);
+  $('tk').innerHTML = takeaways({d, tr: tr && tr.t, where:'이 상권'});
 }
 
 // ---------- 건물
@@ -677,10 +789,21 @@ function reshow(){
   const s = state.sel; if(!s) return;
   if(s.kind === 'area') showArea(s.code); else if(s.kind === 'building') showBuilding(s.jkey); else if(s.kind === 'point') showPoint(s.lat, s.lon, s.title, s.addr);
 }
-$('svc').addEventListener('change', async e => { state.svc = e.target.value; await loadStats(); drawAreas(); drawLegend(); reshow(); });
-document.querySelectorAll('.seg button').forEach(b => b.addEventListener('click', () => {
+$('svc').addEventListener('change', async e => {
+  state.svc = e.target.value; await (state.mode === 'trend' ? loadTrend() : loadStats()); drawAreas(); drawLegend();
+  if(state.sel) reshow(); else if(state.mode === 'trend') showTrendHome();
+});
+document.querySelectorAll('#mode button').forEach(b => b.addEventListener('click', async () => {
+  state.mode = b.dataset.m;
+  document.querySelectorAll('#mode button').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+  $('yrs').style.display = state.mode === 'trend' ? 'none' : '';
+  if(state.mode === 'trend') await loadTrend(); else await loadStats();
+  drawAreas(); drawLegend();
+  if(!state.sel || state.sel.kind !== 'area') showHome();
+}));
+document.querySelectorAll('#yrs button').forEach(b => b.addEventListener('click', () => {
   state.y = +b.dataset.y;
-  document.querySelectorAll('.seg button').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+  document.querySelectorAll('#yrs button').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
   drawAreas(); drawLegend();
 }));
 

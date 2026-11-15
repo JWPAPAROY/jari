@@ -26,3 +26,6 @@ commit;
 SQL
 bash ./db.sh -q -f data/tmp/load.sql
 bash ./db.sh -tAc "select 'license '||count(*) from license union all select 'cohort '||count(*) from cohort union all select 'area '||count(*) from area"
+# 지우고 다시 넣은 자리(빈 공간)를 돌려받음: 안 하면 매주 커져 무료 한도 500MB를 넘김
+bash ./db.sh -q -c "vacuum full analyze license" -c "vacuum full analyze cohort" -c "vacuum full analyze building"
+bash ./db.sh -tAc "select 'db '||pg_size_pretty(pg_database_size('postgres'))"

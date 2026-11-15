@@ -30,3 +30,12 @@ jobs:
           JARI_DB_PASSWORD: ${{ secrets.JARI_DB_PASSWORD }}
           PSQL: psql
         run: bash pipeline/load.sh
+      - name: Trend (서울시 상권분석 매출·인구, 새 분기만)
+        env:
+          JARI_DB_PASSWORD: ${{ secrets.JARI_DB_PASSWORD }}
+          SEOUL_API_KEY: ${{ secrets.SEOUL_API_KEY }}
+          PSQL: psql
+        run: |
+          HAVE=$(bash ./db.sh -tAc "select distinct q from area_q" | tr '\n' ' ')
+          python -I pipeline/fetch_trend.py $HAVE
+          bash pipeline/load_trend.sh
