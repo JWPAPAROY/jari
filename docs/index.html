@@ -367,14 +367,18 @@ async function landInfo(lat, lon, addr){
   const byY = new Map(); arr(pr?.indvdLandPrices?.field).forEach(x => { if(+x.pblntfPclnd > 0) byY.set(+x.stdrYear, +x.pblntfPclnd); });
   const prices = [...byY].map(([y,p]) => ({y, p})).sort((a,b) => a.y - b.y);
   const bld = vwFeat(bl).sort((a,b) => (+b.totalarea||0) - (+a.totalarea||0))[0] || null;
-  const near = vwFeat(nb).filter(x => /대$/.test(x.jibun || '') && +x.jiga > 0 && x.pnu !== pnu).map(x => +x.jiga);
-  return {pnu, addr: paddr, c, prices, bld, near};
+  const nf = vwFeat(nb).filter(x => /대$/.test(x.jibun || '') && +x.jiga > 0 && x.pnu !== pnu);
+  const cnt = {}; nf.forEach(x => cnt[x.gosi_year] = (cnt[x.gosi_year] || 0) + 1);
+  const nearYear = +(Object.entries(cnt).sort((a,b) => b[1] - a[1])[0] || [0])[0];   // 지적도 공시지가 기준 연도(보통 작년)
+  const near = nf.filter(x => +x.gosi_year === nearYear).map(x => +x.jiga);
+  return {pnu, addr: paddr, c, prices, bld, near, nearYear};
 }
 function landStats(L){
   if(!L) return {};
   const last = L.prices[L.prices.length - 1], by = y => L.prices.find(x => x.y === y);
   const p5 = last && by(last.y - 5), p10 = last && by(last.y - 10);
-  const top = last && L.near.length >= 15 ? Math.max(1, Math.round(100 * L.near.filter(x => x >= last.p).length / L.near.length)) : null;
+  const ref = by(L.nearYear);   // 주변 필지와 같은 해 값으로 비교
+  const top = ref && L.near.length >= 15 ? Math.max(1, Math.round(100 * L.near.filter(x => x >= ref.p).length / L.near.length)) : null;
   const cagr10 = p10 ? Math.pow(last.p / p10.p, 1/10) - 1 : null;
   return {last, ch5: p5 ? last.p / p5.p - 1 : null, cagr10, top, nearMed: median(L.near)};
 }
@@ -411,7 +415,7 @@ function landHtml(L){
     const bits = [];
     if(s.ch5 != null) bits.push('5년 전보다 <b class="num">'+(s.ch5 >= 0 ? '+' : '')+Math.round(s.ch5*100)+'%</b>');
     if(s.cagr10 != null) bits.push('10년 연평균 <b class="num">'+(s.cagr10*100).toFixed(1)+'%</b>');
-    if(s.top != null) bits.push('반경 150m 대지 '+L.near.length+'필지 중 <b>상위 '+s.top+'%</b> (주변 중앙값 평당 '+won(s.nearMed * PY)+')');
+    if(s.top != null) bits.push('반경 150m 대지 '+L.near.length+'필지 중 <b>상위 '+s.top+'%</b> ('+L.nearYear+'년 기준, 주변 중앙값 평당 '+won(s.nearMed * PY)+')');
     if(bits.length) h += '<p class="note" style="margin:4px 0 0">' + bits.join(' · ') + '</p>';
     h += priceSpark(L.prices);
     h += '<p class="note">공시지가는 세금 기준인 정부 평가액으로, 시세나 임대료가 아닙니다. 주변보다 높으면 임대료도 높을 가능성이 크다는 정도로 보세요.</p>';
@@ -459,7 +463,7 @@ function detailHtml(d, where){
 // ---------- 한눈에 보기: 숫자에서 문장 뽑기 (표본이 충분할 때만)
 function takeaways({bld, near, d, L, turn, where}){
   const out = [], r = (s,o) => o ? s/o : null, P = x => Math.round(x*100) + '%';
-  const noun = x => esc(x.g === 'chain' ? (x.k === '프랜차이즈' ? '프랜차이즈 매장' : x.k) : x.k + ' 가게');
+  const noun = x => esc(x.g === 'chain' ? (x.k === '프랜차이즈' ? '프랜차이즈 가게' : x.k) : x.k + ' 가게');
   if(bld && near && bld.o3 >= 5 && near.o3 >= 30){
     const a = r(bld.s3, bld.o3), b = r(near.s3, near.o3);
     if(Math.abs(a - b) >= .08) out.push('이 건물에서 문 연 가게의 3년 생존율은 <b>'+P(a)+'</b>로 반경 300m 평균('+P(b)+')보다 <b class="'+(a > b ? 'good' : 'bad')+'">'+(a > b ? '높습니다' : '낮습니다')+'</b>.');
