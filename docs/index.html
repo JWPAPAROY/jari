@@ -107,6 +107,20 @@ button:focus-visible, select:focus-visible, input:focus-visible{outline:2px soli
 @media (max-width:480px){ .m-only{display:inline} }
 footer.foot{font-size:12px; color:var(--muted); margin-top:28px; border-top:1px solid var(--line); padding-top:10px}
 footer.foot p{margin:4px 0}
+.basemap-sat{filter:none}
+.mapswitch{display:flex; background:var(--panel); border-radius:8px; overflow:hidden; box-shadow:0 2px 8px rgba(0,0,0,.15)}
+.mapswitch button{font:inherit; font-size:12.5px; border:0; padding:6px 10px; background:var(--panel); color:var(--ink); cursor:pointer}
+.mapswitch button[aria-pressed="true"]{background:var(--accent); color:var(--panel)}
+.takeaways{margin:14px 0 0; padding:12px 14px 12px 30px; background:var(--accent-soft); border-radius:8px; font-size:13.5px}
+.takeaways li{margin:3px 0}
+.takeaways .h{display:block; margin-left:-16px; font-size:12px; letter-spacing:.05em; color:var(--accent); font-weight:700; list-style:none}
+dl.facts{display:grid; grid-template-columns:max-content 1fr; gap:5px 14px; margin:0; font-size:13.5px}
+dl.facts dt{color:var(--muted); font-size:12.5px}
+dl.facts dd{margin:0}
+.spark{display:block; width:100%; height:auto; margin-top:6px}
+.legend-inline{font-size:12px; color:var(--muted)}
+.legend-inline i{display:inline-block; width:10px; height:10px; border-radius:2px; margin:0 4px 0 10px; vertical-align:-1px}
+.good{color:var(--safe)} .bad{color:var(--risk)}
 </style>
 </head>
 <body>
@@ -186,15 +200,47 @@ const OSM = () => L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', 
   maxZoom: 19, className:'basemap',
   attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
 });
+const VW_DOMAIN = 'https://jwpaparoy.github.io';
 if (VWORLD_KEY) {
-  const vw = L.tileLayer(`https://api.vworld.kr/req/wmts/1.0.0/${VWORLD_KEY}/Base/{z}/{y}/{x}.png`, {
-    minZoom: 6, maxZoom: 19, className:'basemap',
-    attribution:'&copy; <a href="https://www.vworld.kr/">브이월드</a>(국토교통부)'
-  }).addTo(map);
+  const VWA = '&copy; <a href="https://www.vworld.kr/">브이월드</a>(국토교통부)';
+  const vwt = (lay, ext, cls) => L.tileLayer(`https://api.vworld.kr/req/wmts/1.0.0/${VWORLD_KEY}/${lay}/{z}/{y}/{x}.${ext}`, {minZoom:6, maxZoom:19, className:cls, attribution:VWA});
+  const vw = vwt('Base', 'png', 'basemap').addTo(map);
+  const sat = L.layerGroup([vwt('Satellite', 'jpeg', 'basemap-sat'), vwt('Hybrid', 'png', 'basemap-sat')]);
   let ok = 0, bad = 0;
   vw.on('tileload', () => ok++);
-  vw.on('tileerror', () => { if (++bad >= 6 && ok === 0) { map.removeLayer(vw); OSM().addTo(map); } });
+  vw.on('tileerror', () => { if (++bad >= 6 && ok === 0) { map.removeLayer(vw); OSM().addTo(map); sw.remove(); } });
+  // 일반 / 위성 전환
+  const sw = L.control({position:'topright'});
+  sw.onAdd = () => {
+    const d = L.DomUtil.create('div', 'mapswitch'); L.DomEvent.disableClickPropagation(d);
+    d.innerHTML = '<button type="button" data-m="base" aria-pressed="true">지도</button><button type="button" data-m="sat" aria-pressed="false">위성</button>';
+    d.addEventListener('click', e => {
+      const b = e.target.closest('[data-m]'); if(!b) return;
+      const s = b.dataset.m === 'sat';
+      if(s){ map.removeLayer(vw); sat.addTo(map); } else { map.removeLayer(sat); vw.addTo(map); }
+      d.querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+      areaLayer.eachLayer(l => l.setStyle({fillOpacity: s ? .18 : (map.getZoom() >= 16 ? .12 : .45)}));
+    });
+    return d;
+  };
+  sw.addTo(map);
 } else OSM().addTo(map);
+
+// 브이월드 API는 CORS가 없어 JSONP로 부름
+let jpN = 0;
+function jsonp(url, ms = 8000){
+  return new Promise((res, rej) => {
+    const cb = '__vw' + (++jpN), s = document.createElement('script');
+    const done = () => { delete window[cb]; s.remove(); clearTimeout(t); };
+    const t = setTimeout(() => { done(); rej(new Error('timeout')); }, ms);
+    window[cb] = d => { done(); res(d); };
+    s.onerror = () => { done(); rej(new Error('load')); };
+    s.src = url + (url.includes('?') ? '&' : '?') + 'callback=' + cb;
+    document.head.appendChild(s);
+  });
+}
+const vwq = (path, p) => jsonp('https://api.vworld.kr' + path + '?' + new URLSearchParams({key:VWORLD_KEY, domain:VW_DOMAIN, format:'json', ...p}));
+const vwFeat = d => d?.response?.status === 'OK' ? d.response.result.featureCollection.features.map(f => f.properties) : [];
 const areaLayer = L.layerGroup().addTo(map);
 const bldLayer = L.layerGroup().addTo(map);
 let marker = null;
@@ -281,6 +327,181 @@ const FOOT = '<footer class="foot"><p><b>생존율</b> 2016년 이후 문을 연
 
 function setMarker(lat, lon){ if(marker) marker.remove(); marker = L.circleMarker([lat,lon], {radius:10, color:css('--accent'), weight:3, fill:false}).addTo(map); }
 
+// ---------- 땅·건물 정보 (브이월드: 지적도·토지특성·개별공시지가·건물)
+const arr = x => [].concat(x || []);
+const PY = 3.3058;
+const won = n => n >= 1e8 ? (n/1e8).toFixed(n >= 1e9 ? 0 : 1) + '억 원' : Math.round(n/1e4).toLocaleString('ko-KR') + '만 원';
+const median = a => { if(!a.length) return null; const s = [...a].sort((x,y) => x-y), m = s.length >> 1; return s.length % 2 ? s[m] : (s[m-1] + s[m]) / 2; };
+const BLD_USE = {'01':'단독주택','02':'공동주택','03':'제1종 근린생활시설','04':'제2종 근린생활시설','05':'문화·집회시설','06':'종교시설','07':'판매시설','08':'운수시설','09':'의료시설','10':'교육연구시설','11':'노유자시설','12':'수련시설','13':'운동시설','14':'업무시설','15':'숙박시설','16':'위락시설','17':'공장','18':'창고시설','20':'자동차 관련 시설','28':'관광휴게시설'};
+function roadGloss(s){
+  if(!s) return '';
+  const w = s.startsWith('광대') ? '폭 25m 이상 큰길' : s.startsWith('중로') ? '폭 12~25m 길' : s.startsWith('소로') ? '폭 8~12m 길' : s.startsWith('세로') ? '폭 8m 미만 골목' : s.startsWith('맹지') ? '길에 닿지 않음' : '';
+  const corner = /각/.test(s) ? ' · 모퉁이 땅' : '';
+  return esc(s) + (w ? ' <span class="note">(' + w + corner + ')</span>' : '');
+}
+const JKEY_RE = /(\S+구)\s+(\S+동\d*가?)\s+(산\s*)?(\d+)(?:-(\d+))?/;
+function toJkey(addr){ const m = JKEY_RE.exec(addr || ''); return m ? m[1] + '|' + m[2] + ' ' + m[4] + (m[5] && m[5] !== '0' ? '-' + m[5] : '') : null; }
+
+async function landInfo(lat, lon, addr){
+  if(!VWORLD_KEY) return null;
+  let pnu = null, pt = [lat, lon], paddr = null;
+  if(addr){
+    try{
+      const r = (await vwq('/req/address', {service:'address', request:'getcoord', version:'2.0', crs:'epsg:4326', type:'parcel', refine:'true', simple:'false', address:addr})).response;
+      if(r.status === 'OK'){ pnu = r.refined.structure.level4LC; pt = [+r.result.point.y, +r.result.point.x]; paddr = r.refined.text; }
+    }catch(e){}
+  }
+  if(!pnu){
+    const f = vwFeat(await vwq('/req/data', {service:'data', request:'GetFeature', data:'LP_PA_CBND_BUBUN', geomFilter:`POINT(${lon} ${lat})`, crs:'EPSG:4326', geometry:'false', size:'1'}).catch(() => null));
+    if(f[0]){ pnu = f[0].pnu; paddr = f[0].addr; }
+  }
+  if(!pnu) return null;
+  const dLat = 150/111000, dLon = 150/88000;
+  const [ch, pr, bl, nb] = await Promise.all([
+    vwq('/ned/data/getLandCharacteristics', {pnu, numOfRows:'50'}).catch(() => null),
+    vwq('/ned/data/getIndvdLandPriceAttr', {pnu, numOfRows:'100'}).catch(() => null),
+    vwq('/req/data', {service:'data', request:'GetFeature', data:'LT_C_BLDGINFO', geomFilter:`POINT(${pt[1]} ${pt[0]})`, crs:'EPSG:4326', geometry:'false', size:'5'}).catch(() => null),
+    vwq('/req/data', {service:'data', request:'GetFeature', data:'LP_PA_CBND_BUBUN', geomFilter:`BOX(${pt[1]-dLon},${pt[0]-dLat},${pt[1]+dLon},${pt[0]+dLat})`, crs:'EPSG:4326', geometry:'false', size:'1000'}).catch(() => null)
+  ]);
+  const c = arr(ch?.landCharacteristicss?.field).sort((a,b) => (b.stdrYear||'').localeCompare(a.stdrYear||'') || (b.lastUpdtDt||'').localeCompare(a.lastUpdtDt||''))[0] || null;
+  const byY = new Map(); arr(pr?.indvdLandPrices?.field).forEach(x => { if(+x.pblntfPclnd > 0) byY.set(+x.stdrYear, +x.pblntfPclnd); });
+  const prices = [...byY].map(([y,p]) => ({y, p})).sort((a,b) => a.y - b.y);
+  const bld = vwFeat(bl).sort((a,b) => (+b.totalarea||0) - (+a.totalarea||0))[0] || null;
+  const near = vwFeat(nb).filter(x => /대$/.test(x.jibun || '') && +x.jiga > 0 && x.pnu !== pnu).map(x => +x.jiga);
+  return {pnu, addr: paddr, c, prices, bld, near};
+}
+function landStats(L){
+  if(!L) return {};
+  const last = L.prices[L.prices.length - 1], by = y => L.prices.find(x => x.y === y);
+  const p5 = last && by(last.y - 5), p10 = last && by(last.y - 10);
+  const top = last && L.near.length >= 15 ? Math.max(1, Math.round(100 * L.near.filter(x => x >= last.p).length / L.near.length)) : null;
+  const cagr10 = p10 ? Math.pow(last.p / p10.p, 1/10) - 1 : null;
+  return {last, ch5: p5 ? last.p / p5.p - 1 : null, cagr10, top, nearMed: median(L.near)};
+}
+function priceSpark(prices){
+  const pts = prices.filter(x => x.y >= 2010); if(pts.length < 3) return '';
+  const W = 360, H = 70, P = 4, max = Math.max(...pts.map(x => x.p)), min = Math.min(...pts.map(x => x.p));
+  const X = i => P + i * (W - 2*P) / (pts.length - 1), Y = p => H - 14 - (max === min ? .5 : (p - min) / (max - min)) * (H - 22);
+  const d = pts.map((x,i) => (i ? 'L' : 'M') + X(i).toFixed(1) + ' ' + Y(x.p).toFixed(1)).join(' ');
+  return '<svg class="spark" viewBox="0 0 '+W+' '+H+'" role="img" aria-label="공시지가 추이 '+pts[0].y+'~'+pts[pts.length-1].y+'">' +
+    '<path d="'+d+'" fill="none" stroke="'+css('--accent')+'" stroke-width="2"/>' +
+    '<text x="'+P+'" y="'+(H-2)+'" font-size="10" fill="'+css('--muted')+'">'+pts[0].y+'</text>' +
+    '<text x="'+(W-P)+'" y="'+(H-2)+'" font-size="10" text-anchor="end" fill="'+css('--muted')+'">'+pts[pts.length-1].y+'</text></svg>';
+}
+function landHtml(L){
+  if(!L) return '<p class="note">이 위치의 땅 정보를 찾지 못했습니다.</p>';
+  const c = L.c, b = L.bld, s = landStats(L), rows = [];
+  rows.push(['지번', esc(L.addr || '')]);
+  if(c){
+    rows.push(['용도지역', esc(c.prposArea1Nm) + (c.prposArea2Nm && c.prposArea2Nm !== '지정되지않음' ? ' · ' + esc(c.prposArea2Nm) : '')]);
+    rows.push(['토지 이용', esc(c.ladUseSittnNm || '')]);
+    rows.push(['접한 길', roadGloss(c.roadSideCodeNm)]);
+    if(+c.lndpclAr) rows.push(['대지 면적', '<span class="num">'+fmt(Math.round(+c.lndpclAr))+'㎡</span> <span class="note">('+fmt(Math.round(+c.lndpclAr/PY))+'평)</span>']);
+  }
+  if(b){
+    const yr = /^\d{4}/.test(b.useapr_day || '') ? +b.useapr_day.slice(0,4) : null;
+    rows.push(['건물', [b.bld_nm, '지상 '+(+b.grnd_flr||0)+'층' + (+b.ugrnd_flr ? ' · 지하 '+b.ugrnd_flr+'층' : '')].filter(Boolean).map(esc).join(' · ')]);
+    if(BLD_USE[(b.usability||'').slice(0,2)]) rows.push(['주용도', BLD_USE[b.usability.slice(0,2)]]);
+    if(+b.totalarea) rows.push(['연면적', '<span class="num">'+fmt(Math.round(+b.totalarea))+'㎡</span> <span class="note">('+fmt(Math.round(+b.totalarea/PY))+'평)</span>']);
+    if(yr) rows.push(['사용승인', yr + '년 <span class="note">(' + (new Date().getFullYear() - yr) + '년 된 건물)</span>']);
+  }
+  let h = '<dl class="facts">' + rows.map(([k,v]) => '<dt>'+k+'</dt><dd>'+v+'</dd>').join('') + '</dl>';
+  if(s.last){
+    h += '<h2>공시지가</h2><p style="margin:0"><b class="num">'+won(s.last.p * PY)+'</b> <span class="note">평당 · ㎡당 '+won(s.last.p)+' · '+s.last.y+'년</span></p>';
+    const bits = [];
+    if(s.ch5 != null) bits.push('5년 전보다 <b class="num">'+(s.ch5 >= 0 ? '+' : '')+Math.round(s.ch5*100)+'%</b>');
+    if(s.cagr10 != null) bits.push('10년 연평균 <b class="num">'+(s.cagr10*100).toFixed(1)+'%</b>');
+    if(s.top != null) bits.push('반경 150m 대지 '+L.near.length+'필지 중 <b>상위 '+s.top+'%</b> (주변 중앙값 평당 '+won(s.nearMed * PY)+')');
+    if(bits.length) h += '<p class="note" style="margin:4px 0 0">' + bits.join(' · ') + '</p>';
+    h += priceSpark(L.prices);
+    h += '<p class="note">공시지가는 세금 기준인 정부 평가액으로, 시세나 임대료가 아닙니다. 주변보다 높으면 임대료도 높을 가능성이 크다는 정도로 보세요.</p>';
+  }
+  return h;
+}
+
+// ---------- 상세 통계 (DB place_detail): 층·면적·체인별 생존, 연도별 개업·폐업, 지금 영업 중
+const SVC_LABEL = () => state.svc === '전체' ? '모든 업종' : state.svc === '기타' ? '기타(분류 어려움)' : state.svc;
+const G_NAME = {floor:'층', size:'면적', chain:'운영'};
+function detailHtml(d, where){
+  if(!d) return '';
+  let h = '<h2>조건별 3년 생존 <span class="note">· '+esc(where)+' · '+esc(SVC_LABEL())+'</span></h2>';
+  if(!d.groups.some(g => g.o3 > 0)) h += '<p class="note">조건별로 나눌 만큼 기록이 없습니다.</p>';
+  else {
+    h += '<div class="tblwrap"><table><thead><tr><th>조건</th><th></th><th class="r">1년</th><th class="r">3년</th><th class="col-bar" style="width:70px"></th><th class="r">3년 표본</th></tr></thead><tbody>';
+    for(const g of ['floor','size','chain']){
+      const rs = d.groups.filter(x => x.g === g && x.o3 > 0);
+      rs.forEach((r,i) => { const r3 = r.s3/r.o3;
+        h += '<tr class="'+(r.o3 < 10 ? 'thin' : '')+'"><td class="note">'+(i ? '' : G_NAME[g])+'</td><td>'+esc(r.k)+'</td><td class="r num">'+pct(r.s1,r.o1)+'</td><td class="r num"><b>'+pct(r.s3,r.o3)+'</b></td>' +
+          '<td class="col-bar"><div class="bar"><i style="width:'+(r3*100).toFixed(0)+'%;background:'+color3(r3)+'"></i></div></td><td class="r num note">'+fmt(r.o3)+'</td></tr>'; });
+    }
+    h += '</tbody></table></div><p class="note">흐린 줄은 3년 관찰 가게가 10곳 미만이라 참고만 하세요. 위쪽 업종 선택을 바꾸면 그 업종만 다시 계산합니다.</p>';
+  }
+  // 연도별 개업·폐업
+  const ys = d.years || [], cy = new Date().getFullYear();
+  if(ys.some(y => y.opens || y.closes)){
+    const W = 360, H = 110, max = Math.max(1, ...ys.map(y => Math.max(y.opens, y.closes))), bw = (W - 8) / ys.length;
+    const bars = ys.map((y,i) => { const x = 4 + i*bw, ho = (H-26) * y.opens/max, hc = (H-26) * y.closes/max, part = y.y === cy;
+      return '<rect x="'+(x+1).toFixed(1)+'" y="'+(H-14-ho).toFixed(1)+'" width="'+(bw/2-1.5).toFixed(1)+'" height="'+ho.toFixed(1)+'" fill="'+css('--accent')+'" opacity="'+(part?.45:1)+'"><title>'+y.y+' 개업 '+y.opens+'</title></rect>' +
+        '<rect x="'+(x+bw/2).toFixed(1)+'" y="'+(H-14-hc).toFixed(1)+'" width="'+(bw/2-1.5).toFixed(1)+'" height="'+hc.toFixed(1)+'" fill="'+css('--risk')+'" opacity="'+(part?.45:1)+'"><title>'+y.y+' 폐업 '+y.closes+'</title></rect>' +
+        (i % 2 === 0 || i === ys.length-1 ? '<text x="'+(x+bw/2).toFixed(1)+'" y="'+(H-2)+'" font-size="10" text-anchor="middle" fill="'+css('--muted')+'">'+String(y.y).slice(2)+'</text>' : ''); }).join('');
+    h += '<h2>해마다 문 연 가게 · 닫은 가게 <span class="note">· '+esc(SVC_LABEL())+'</span></h2><p class="legend-inline" style="margin:0"><i style="background:'+css('--accent')+';margin-left:0"></i>개업<i style="background:'+css('--risk')+'"></i>폐업 · 흐린 막대는 올해(진행 중)</p>' +
+      '<svg class="spark" viewBox="0 0 '+W+' '+H+'" role="img" aria-label="연도별 개업·폐업">'+bars+'</svg>';
+  }
+  // 지금 영업 중
+  const on = d.open_now || [], tot = on.reduce((s,x) => s + x.n, 0);
+  if(tot){
+    if(state.svc === '전체') h += '<h2>지금 영업 중인 가게 '+fmt(tot)+'곳</h2><p class="note" style="margin:0">' + on.slice(0,7).map(x => esc(x.svc === '기타' ? '기타' : x.svc)+' <b class="num">'+x.n+'</b>').join(' · ') + '</p>';
+    else { const m = on.find(x => x.svc === state.svc); h += '<h2>지금 영업 중인 '+esc(SVC_LABEL())+'</h2><p style="margin:0"><b class="num">'+(m ? m.n : 0)+'곳</b> <span class="note">· 음식점·카페 '+fmt(tot)+'곳 중 '+Math.round(100*(m ? m.n : 0)/tot)+'%</span></p>'; }
+  }
+  return h;
+}
+
+// ---------- 한눈에 보기: 숫자에서 문장 뽑기 (표본이 충분할 때만)
+function takeaways({bld, near, d, L, turn, where}){
+  const out = [], r = (s,o) => o ? s/o : null, P = x => Math.round(x*100) + '%';
+  if(bld && near && bld.o3 >= 5 && near.o3 >= 30){
+    const a = r(bld.s3, bld.o3), b = r(near.s3, near.o3);
+    if(Math.abs(a - b) >= .08) out.push('이 건물에서 문 연 가게의 3년 생존율은 <b>'+P(a)+'</b>로 반경 300m 평균('+P(b)+')보다 <b class="'+(a > b ? 'good' : 'bad')+'">'+(a > b ? '높습니다' : '낮습니다')+'</b>.');
+    else out.push('이 건물의 3년 생존율('+P(a)+')은 반경 300m 평균('+P(b)+')과 비슷합니다.');
+  }
+  if(d){
+    for(const g of ['floor','size','chain']){
+      const rs = d.groups.filter(x => x.g === g && x.o3 >= 10).map(x => ({...x, v: x.s3/x.o3})).sort((a,b) => b.v - a.v);
+      if(rs.length >= 2 && rs[0].v - rs[rs.length-1].v >= .08)
+        out.push(esc(where)+'에서 '+esc(SVC_LABEL())+'은(는) <b>'+esc(rs[0].k)+'</b>('+P(rs[0].v)+')가 <b>'+esc(rs[rs.length-1].k)+'</b>('+P(rs[rs.length-1].v)+')보다 3년을 잘 버텼습니다.');
+    }
+    const cy = new Date().getFullYear(), last3 = (d.years || []).filter(y => y.y >= cy-3 && y.y < cy);
+    const o = last3.reduce((s,y) => s + y.opens, 0), c = last3.reduce((s,y) => s + y.closes, 0);
+    if(o + c >= 20){
+      const span = (cy-3)+'~'+(cy-1)+'년';
+      if(c > o * 1.15) out.push(span+' 폐업 <b>'+c+'</b>건이 개업 '+o+'건보다 많아, 가게 수가 <b class="bad">줄고 있는</b> 곳입니다.');
+      else if(o > c * 1.15) out.push(span+' 개업 <b>'+o+'</b>건이 폐업 '+c+'건보다 많아, 가게가 <b class="good">늘고 있는</b> 곳입니다. 경쟁도 함께 늘어납니다.');
+      else out.push(span+' 개업 '+o+'건, 폐업 '+c+'건으로 가게 수가 큰 변화 없이 <b>손바뀜</b>만 일어나는 곳입니다.');
+    }
+    if(state.svc !== '전체'){
+      const on = d.open_now || [], tot = on.reduce((s,x) => s + x.n, 0), m = on.find(x => x.svc === state.svc);
+      if(tot >= 20) out.push('지금 '+esc(where)+'에 '+esc(SVC_LABEL())+' <b>'+(m ? m.n : 0)+'곳</b>이 영업 중입니다(음식점·카페의 '+Math.round(100*(m ? m.n : 0)/tot)+'%).');
+    }
+  }
+  if(turn && turn.closes >= 2 && turn.gapMed != null)
+    out.push('이 건물에서 가게가 문을 닫은 뒤 다음 음식점·카페가 들어오기까지 <b>중앙값 '+(turn.gapMed < 60 ? Math.round(turn.gapMed)+'일' : (turn.gapMed/30.4).toFixed(0)+'개월')+'</b> 걸렸습니다'+(turn.unfilled ? ' (그 뒤로 아직 음식점이 안 들어온 경우 '+turn.unfilled+'번)' : '')+'.');
+  const s = landStats(L);
+  if(s.top != null) out.push('공시지가가 반경 150m 대지 중 <b>상위 '+s.top+'%</b>입니다' + (s.top <= 25 ? '. 주변보다 임대료가 높을 가능성이 큽니다.' : s.top >= 75 ? '. 주변보다 땅값이 낮은 편입니다.' : '.'));
+  if(s.ch5 != null) out.push('땅값(공시지가)은 5년 동안 <b>'+(s.ch5 >= 0 ? '+' : '')+Math.round(s.ch5*100)+'%</b> 움직였습니다.');
+  if(!out.length) return '';
+  return '<ul class="takeaways"><li class="h">한눈에 보기</li>' + out.map(x => '<li>'+x+'</li>').join('') + '</ul>';
+}
+// 건물 임차 회전: 폐업 뒤 다음 가게가 들어오기까지 걸린 기간
+function turnover(hist){
+  const closes = hist.filter(x => x.close_date && x.life_days != null), gaps = []; let unfilled = 0;
+  for(const c of closes){
+    const nxt = hist.filter(x => x.open_date >= c.close_date).map(x => x.open_date).sort()[0];
+    if(nxt) gaps.push((new Date(nxt) - new Date(c.close_date)) / 864e5); else unfilled++;
+  }
+  return {closes: closes.length, gapMed: median(gaps), unfilled, lifeMed: median(closes.map(x => x.life_days))};
+}
+let panelTok = 0;
+
 // ---------- 처음 화면
 async function showHome(){
   const rows = await rpc('seoul_stats', {});
@@ -294,86 +515,163 @@ async function showHome(){
 
 // ---------- 상권
 async function showArea(code){
-  state.sel = {kind:'area', code};
+  state.sel = {kind:'area', code}; const tok = ++panelTok;
   const a = AREAS.find(x => x.code === code); if(!a) return;
   $('panel').innerHTML = '<p class="loading">불러오는 중…</p>';
   const rows = await rest('area_stats?select=*&code=eq.' + code);
+  if(tok !== panelTok) return;
   const all = rows.find(r => r.svc === '전체') || {};
   const best = rows.filter(r => r.svc !== '전체' && r.o3 >= 10).sort((x,y) => y.s3/y.o3 - x.s3/x.o3)[0];
   $('panel').innerHTML = '<div class="label">'+esc(a.gu)+' · '+esc(a.kind)+'</div><h1>'+esc(a.name)+'</h1>' +
     (all.med_days ? '<p class="sub">문 닫은 가게의 영업 기간 중앙값 <b class="num">'+(all.med_days/365).toFixed(1)+'년</b></p>' : '') +
-    survBlock(all, '이 상권 전체') +
+    survBlock(all, '이 상권 전체') + '<div id="tk"></div>' +
     (best ? '<p class="note" style="margin-top:10px">이 상권에서 3년을 가장 잘 버틴 업종은 <b>'+esc(best.svc)+'</b>('+pct(best.s3,best.o3)+', '+best.o3+'곳 중)입니다.</p>' : '') +
-    '<h2>업종별 생존율</h2>' + svcTable(rows, 10) + FOOT;
+    '<h2>업종별 생존율</h2>' + svcTable(rows, 10) + '<div id="dt"><p class="loading">조건별 통계 불러오는 중…</p></div>' + FOOT;
   if(a.lat) map.flyTo([a.lat, a.lon], Math.max(map.getZoom(), 15), {duration:.6});
   toPanel();
+  const d = await rpc('place_detail', {p_lat:0, p_lon:0, p_r:0, p_svc:state.svc, p_area:code}).catch(() => null);
+  if(tok !== panelTok) return;
+  $('dt').innerHTML = detailHtml(d, '이 상권');
+  $('tk').innerHTML = takeaways({d, where:'이 상권'});
 }
 
 // ---------- 건물
 async function showBuilding(jkey){
-  state.sel = {kind:'building', jkey};
+  state.sel = {kind:'building', jkey}; const tok = ++panelTok;
   $('panel').innerHTML = '<p class="loading">불러오는 중…</p>';
   const [b] = await rest('building?select=*&jkey=eq.' + encodeURIComponent(jkey));
+  if(tok !== panelTok) return;
   if(!b){ $('panel').innerHTML = '<p>기록이 없습니다.</p>'; return; }
+  const addr = '서울특별시 ' + b.gu + ' ' + b.label;
+  const landP = landInfo(b.lat, b.lon, addr).catch(() => null);
+  const detP = rpc('place_detail', {p_lat:b.lat, p_lon:b.lon, p_r:300, p_svc:state.svc}).catch(() => null);
   const [hist, near, area] = await Promise.all([
     rest('license?select=name,biz_type,svc,open_date,close_date,life_days,floor,size_m2,status&jkey=eq.' + encodeURIComponent(jkey) + '&order=open_date.desc&limit=200'),
     rpc('near_stats', {p_lat:b.lat, p_lon:b.lon, p_r:300}),
     b.area_code ? rest('area_stats?select=*&code=eq.' + b.area_code + '&svc=eq.' + encodeURIComponent('전체')) : Promise.resolve([])
   ]);
+  if(tok !== panelTok) return;
   const a = AREAS.find(x => x.code === b.area_code);
   const nearAll = near.find(r => r.svc === '전체') || {};
   const cmp = (lab, r) => '<tr><td>'+lab+'</td>' + [1,2,3].map(y => '<td class="r num">'+pct(r['s'+y], r['o'+y])+'</td>').join('') + '<td class="r num note">'+fmt(r.o3)+'</td></tr>';
   const recent = hist.filter(x => x.close_date && x.close_date >= new Date(Date.now()-3*365*864e5).toISOString().slice(0,10)).length;
+  const turn = turnover(hist);
+  const since = hist.filter(x => x.open_date >= '2016-01-01');
+  const gapTxt = g => g < 60 ? Math.round(g) + '일' : (g/30.4).toFixed(0) + '개월';
   $('panel').innerHTML = '<div class="label">'+esc(b.gu)+(a ? ' · '+esc(a.name) : '')+'</div><h1>'+esc(b.label)+'</h1>' +
     (b.road ? '<p class="sub">'+esc(b.road)+'</p>' : '') +
     survBlock(b, '이 건물에서 문 연 가게') +
     (b.o1 < 5 ? '<p class="warn">이 건물은 기록이 적어 숫자가 크게 흔들립니다. 아래 주변·상권 수치를 함께 보세요.</p>' : '') +
     '<p class="note" style="margin-top:8px">지금 영업 중 <b>'+b.n_open+'</b>곳 · 최근 3년 사이 폐업 <b>'+recent+'</b>건</p>' +
+    '<div id="tk"><p class="loading">땅값·주변 흐름 분석 중…</p></div>' +
     '<h2>주변과 비교</h2><div class="tblwrap"><table><thead><tr><th></th><th class="r">1년</th><th class="r">2년</th><th class="r">3년</th><th class="r">3년 표본</th></tr></thead><tbody>' +
       cmp('이 건물', b) + cmp('반경 300m', nearAll) + (area[0] ? cmp('상권 전체', area[0]) : '') + '</tbody></table></div>' +
+    '<h2>땅·건물</h2><div id="land"><p class="loading">브이월드에서 불러오는 중…</p></div>' +
+    '<div id="dt"><p class="loading">조건별 통계 불러오는 중…</p></div>' +
     '<h2>이 근처(300m)에서 오래 버틴 업종</h2>' + svcTable(near, 10) +
-    '<h2>이 건물을 거쳐 간 가게</h2><div class="tblwrap"><table><thead><tr><th>상호</th><th class="col-bar">업종</th><th>개업</th><th>폐업</th><th class="r">영업</th></tr></thead><tbody>' +
+    '<h2>이 건물을 거쳐 간 가게</h2>' +
+    '<p class="note" style="margin:0 0 6px">2016년 이후 개업 <b>'+since.length+'</b> · 폐업 <b>'+turn.closes+'</b>' +
+      (turn.lifeMed != null ? ' · 문 닫은 가게 영업 기간 중앙값 <b>'+(turn.lifeMed/365).toFixed(1)+'년</b>' : '') +
+      (turn.gapMed != null ? ' · 다음 가게까지 중앙값 <b>'+gapTxt(turn.gapMed)+'</b>' : '') +
+      '<br>음식점·카페만 셉니다. 같은 건물 안 다른 호실일 수 있습니다.</p>' +
+    '<div class="tblwrap"><table><thead><tr><th>상호</th><th class="col-bar">업종</th><th>개업</th><th>폐업</th><th class="r">영업</th></tr></thead><tbody>' +
       hist.map(x => '<tr><td>'+esc(x.name)+'<br><span class="note">'+esc(x.floor||'')+(x.size_m2 ? ' · '+Math.round(x.size_m2/3.3058)+'평' : '')+'<span class="m-only"> · '+esc(x.svc || x.biz_type || '')+'</span></span></td><td class="note col-bar">'+esc(x.svc || x.biz_type || '')+'</td><td class="num">'+ym(x.open_date)+'</td><td class="num">'+(ym(x.close_date) || '—')+'</td><td class="r">'+lifeTag(x)+'</td></tr>').join('') +
     '</tbody></table></div>' + FOOT;
   setMarker(b.lat, b.lon);
   map.flyTo([b.lat, b.lon], Math.max(map.getZoom(), 17), {duration:.6});
   toPanel();
+  const [L, d] = await Promise.all([landP, detP]);
+  if(tok !== panelTok) return;
+  $('land').innerHTML = landHtml(L);
+  $('dt').innerHTML = detailHtml(d, '반경 300m');
+  $('tk').innerHTML = takeaways({bld:b, near:nearAll, d, L, turn, where:'반경 300m'});
 }
 
-// ---------- 지도 아무 데나 누르면 반경 통계
-async function showPoint(lat, lon){
-  state.sel = {kind:'point'};
+// ---------- 지도 아무 데나 누르거나 주소를 고르면: 반경 통계 + 땅 정보
+async function showPoint(lat, lon, title, addr){
+  state.sel = {kind:'point', lat, lon, title, addr}; const tok = ++panelTok;
   setMarker(lat, lon);
   $('panel').innerHTML = '<p class="loading">불러오는 중…</p>';
+  const landP = landInfo(lat, lon, addr).catch(() => null);
+  const detP = rpc('place_detail', {p_lat:lat, p_lon:lon, p_r:300, p_svc:state.svc}).catch(() => null);
   const near = await rpc('near_stats', {p_lat:lat, p_lon:lon, p_r:300});
+  if(tok !== panelTok) return;
   const all = near.find(r => r.svc === '전체') || {};
-  $('panel').innerHTML = '<div class="label">고른 위치 반경 300m</div><h1>이 근처 가게들</h1>' + survBlock(all, '') +
+  $('panel').innerHTML = '<div class="label">고른 위치 반경 300m</div><h1>'+esc(title || '이 근처 가게들')+'</h1>' + survBlock(all, '') +
+    '<div id="tk"><p class="loading">땅값·주변 흐름 분석 중…</p></div>' +
+    '<h2>땅·건물</h2><div id="land"><p class="loading">브이월드에서 불러오는 중…</p></div>' +
+    '<div id="dt"><p class="loading">조건별 통계 불러오는 중…</p></div>' +
     '<h2>업종별 생존율</h2>' + svcTable(near, 10) + '<p class="note">점(건물)을 누르면 그 건물의 이력을 볼 수 있습니다.</p>' + FOOT;
   toPanel();
+  const [L, d] = await Promise.all([landP, detP]);
+  if(tok !== panelTok) return;
+  $('land').innerHTML = landHtml(L);
+  $('dt').innerHTML = detailHtml(d, '반경 300m');
+  $('tk').innerHTML = takeaways({d, L, where:'반경 300m'});
 }
 
-// ---------- 검색
-let sTimer = null, lastHits = [];
+// ---------- 검색: 우리 DB(건물·상권) + 브이월드(아무 주소·장소)
+let sTimer = null, lastHits = [], sTok = 0;
+async function vwSearch(q){
+  if(!VWORLD_KEY) return [];
+  const go = p => vwq('/req/search', {service:'search', request:'search', version:'2.0', crs:'EPSG:4326', size:'5', page:'1', query:q, ...p})
+    .then(d => d?.response?.status === 'OK' ? d.response.result.items : []).catch(() => []);
+  const [road, parcel, place] = await Promise.all([go({type:'address', category:'road'}), go({type:'address', category:'parcel'}), go({type:'place'})]);
+  const out = [], seen = new Set();
+  const add = (kind, label, sub, it) => {
+    const pa = it.address?.parcel || '', lat = +it.point.y, lon = +it.point.x;
+    if(!/서울/.test((it.address?.road || '') + pa + label + sub)) return;
+    const k = label + '|' + Math.round(lat*1e4) + Math.round(lon*1e4); if(seen.has(k)) return; seen.add(k);
+    out.push({kind, label, sub, lat, lon, addr: pa ? (/^서울/.test(pa) ? pa : '서울특별시 ' + pa) : null});
+  };
+  road.forEach(it => add('addr', it.address.road, it.address.parcel ? '지번 ' + it.address.parcel : '', it));
+  parcel.forEach(it => add('addr', it.address.parcel, it.address.road || '', it));
+  place.forEach(it => add('place', it.title, (it.address.road || it.address.parcel || '') + (it.category ? ' · ' + it.category.split('>').pop().trim() : ''), it));
+  return out.slice(0, 8);
+}
+const CHIP = {area:'상권', building:'건물', addr:'주소', place:'장소'};
+function renderHits(hits){
+  const box = $('results');
+  if(!hits.length){ box.innerHTML = '<button type="button" disabled>맞는 곳이 없습니다. "망원동 415"처럼 동과 번지, 도로명 주소, 상권·장소 이름으로 찾아 보세요.</button>'; box.hidden = false; return; }
+  box.innerHTML = hits.map((h,i) => '<button type="button" data-i="'+i+'"><span class="chip">'+CHIP[h.kind]+'</span>'+esc(h.label)+'<small>'+esc(h.sub || '')+(h.n ? ' · 가게 '+h.n+'곳' : '')+'</small></button>').join('');
+  box.hidden = false;
+}
 async function doSearch(q, pickFirst){
   q = q.trim(); if(q.length < 2){ $('results').hidden = true; return; }
-  const hits = await rpc('search_places', {q}); lastHits = hits;
-  const box = $('results');
-  if(!hits.length){ box.innerHTML = '<button type="button" disabled>맞는 곳이 없습니다. "망원동 415"처럼 동과 번지, 또는 상권 이름으로 찾아 보세요.</button>'; box.hidden = false; return; }
-  box.innerHTML = hits.map((h,i) => '<button type="button" data-i="'+i+'"><span class="chip">'+(h.kind==='area'?'상권':'건물')+'</span>'+esc(h.label)+'<small>'+esc(h.sub || '')+(h.n ? ' · 가게 '+h.n+'곳' : '')+'</small></button>').join('');
-  box.hidden = false;
-  if(pickFirst){ pick(hits[0]); }
+  const tok = ++sTok;
+  const vwP = vwSearch(q);
+  const db = await rpc('search_places', {q}).catch(() => []);
+  if(tok !== sTok) return;
+  lastHits = db;
+  if(db.length) renderHits(db);
+  if(pickFirst && db.length) return pick(db[0]);
+  const vw = await vwP;
+  if(tok !== sTok) return;
+  lastHits = db.concat(vw);
+  renderHits(lastHits);
+  if(pickFirst && lastHits.length) pick(lastHits[0]);
 }
-function pick(h){
+async function pick(h){
   $('results').hidden = true; $('q').blur();
-  if(h.kind === 'area') showArea(h.id); else showBuilding(h.id);
+  if(h.kind === 'area') return showArea(h.id);
+  if(h.kind === 'building') return showBuilding(h.id);
+  // 주소·장소: 그 지번에 가게 기록이 있으면 건물 화면, 없으면 위치 화면
+  const jk = toJkey(h.addr);
+  if(jk){ const [b] = await rest('building?select=jkey&jkey=eq.' + encodeURIComponent(jk)).catch(() => []); if(b) return showBuilding(b.jkey); }
+  map.flyTo([h.lat, h.lon], Math.max(map.getZoom(), 17), {duration:.6});
+  showPoint(h.lat, h.lon, h.label, h.addr);
 }
-$('q').addEventListener('input', e => { clearTimeout(sTimer); sTimer = setTimeout(() => doSearch(e.target.value).catch(()=>{}), 250); });
+$('q').addEventListener('input', e => { clearTimeout(sTimer); sTimer = setTimeout(() => doSearch(e.target.value).catch(()=>{}), 300); });
 $('q').addEventListener('keydown', e => { if(e.key === 'Enter'){ e.preventDefault(); if(lastHits.length && !$('results').hidden) pick(lastHits[0]); else doSearch(e.target.value, true); } if(e.key === 'Escape') $('results').hidden = true; });
 $('results').addEventListener('click', e => { const b = e.target.closest('[data-i]'); if(b) pick(lastHits[+b.dataset.i]); });
 document.addEventListener('click', e => { if(!e.target.closest('.searchbox')) $('results').hidden = true; });
 
 // ---------- 컨트롤
-$('svc').addEventListener('change', async e => { state.svc = e.target.value; await loadStats(); drawAreas(); drawLegend(); });
+function reshow(){
+  const s = state.sel; if(!s) return;
+  if(s.kind === 'area') showArea(s.code); else if(s.kind === 'building') showBuilding(s.jkey); else if(s.kind === 'point') showPoint(s.lat, s.lon, s.title, s.addr);
+}
+$('svc').addEventListener('change', async e => { state.svc = e.target.value; await loadStats(); drawAreas(); drawLegend(); reshow(); });
 document.querySelectorAll('.seg button').forEach(b => b.addEventListener('click', () => {
   state.y = +b.dataset.y;
   document.querySelectorAll('.seg button').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
