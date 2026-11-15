@@ -109,6 +109,11 @@ button:focus-visible, select:focus-visible, input:focus-visible{outline:2px soli
 footer.foot{font-size:12px; color:var(--muted); margin-top:28px; border-top:1px solid var(--line); padding-top:10px}
 footer.foot p{margin:4px 0}
 .basemap-sat{filter:none}
+.locbtn{width:34px; height:34px; display:grid; place-items:center; background:var(--panel); color:var(--ink); border:0; border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,.15); cursor:pointer; padding:0}
+.locbtn svg{width:18px; height:18px}
+.locbtn.busy svg{animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.toast{position:absolute; left:50%; top:12px; transform:translateX(-50%); z-index:1000; background:var(--ink); color:var(--panel); font-size:13px; padding:7px 12px; border-radius:8px; max-width:calc(100% - 32px); box-shadow:0 4px 14px rgba(0,0,0,.25)}
 .mapswitch{display:flex; background:var(--panel); border-radius:8px; overflow:hidden; box-shadow:0 2px 8px rgba(0,0,0,.15)}
 .mapswitch button{font:inherit; font-size:12.5px; border:0; padding:6px 10px; background:var(--panel); color:var(--ink); cursor:pointer}
 .mapswitch button[aria-pressed="true"]{background:var(--accent); color:var(--panel)}
@@ -254,6 +259,35 @@ const vwFeat = d => d?.response?.status === 'OK' ? d.response.result.featureColl
 const areaLayer = L.layerGroup().addTo(map);
 const bldLayer = L.layerGroup().addTo(map);
 let marker = null;
+
+// 내 위치로 가기 (위치 권한은 브라우저가 물어봄. 위치는 이 기기 안에서만 쓰고 저장·전송하지 않음)
+function toast(msg){
+  const t = L.DomUtil.create('div', 'toast', map.getContainer()); t.textContent = msg; t.setAttribute('role', 'status');
+  setTimeout(() => t.remove(), 3500);
+}
+const SEOUL_BOX = L.latLngBounds([37.41, 126.76], [37.72, 127.19]);
+const locCtl = L.control({position:'topleft'});
+locCtl.onAdd = () => {
+  const b = L.DomUtil.create('button', 'locbtn'); b.type = 'button'; b.title = '내 위치로'; b.setAttribute('aria-label', '내 위치로 이동');
+  b.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>';
+  L.DomEvent.disableClickPropagation(b);
+  b.addEventListener('click', () => {
+    if(!navigator.geolocation){ toast('이 브라우저는 위치 찾기를 지원하지 않습니다.'); return; }
+    b.classList.add('busy');
+    navigator.geolocation.getCurrentPosition(pos => {
+      b.classList.remove('busy');
+      const {latitude:lat, longitude:lon} = pos.coords;
+      if(!SEOUL_BOX.contains([lat, lon])){ toast('지금 위치가 서울 밖이라 자료가 없습니다.'); return; }
+      map.flyTo([lat, lon], 17, {duration:.6});
+      showPoint(lat, lon, '내 위치 주변');
+    }, err => {
+      b.classList.remove('busy');
+      toast(err.code === 1 ? '위치 권한이 꺼져 있습니다. 브라우저 설정에서 이 사이트의 위치 접근을 허용해 주세요.' : '위치를 찾지 못했습니다. 잠시 뒤 다시 눌러 주세요.');
+    }, {enableHighAccuracy:true, timeout:10000, maximumAge:60000});
+  });
+  return b;
+};
+locCtl.addTo(map);
 
 const legend = L.control({position:'bottomleft'});
 legend.onAdd = () => { const d = L.DomUtil.create('div','legend' + (MOBILE() ? ' closed' : '')); d.id = 'legend'; L.DomEvent.disableClickPropagation(d); d.addEventListener('click', () => d.classList.toggle('closed')); return d; };
