@@ -116,6 +116,9 @@ tr.thin td{opacity:.45}
 .note{font-size:12.5px; color:var(--muted)}
 .legend{background:var(--panel); color:var(--ink); padding:8px 10px; border-radius:8px; font-size:12px; line-height:1.5; box-shadow:0 2px 8px rgba(0,0,0,.15)}
 .legend i{display:inline-block; width:12px; height:12px; border-radius:2px; margin-right:6px; vertical-align:-1px}
+.legend i.dot{border-radius:50%; margin-right:4px; vertical-align:middle}
+.legend .dotkey{margin-top:6px; padding-top:6px; border-top:1px solid var(--line)}
+.legend .muted{color:var(--muted); font-size:11px}
 .hint{display:flex; flex-wrap:wrap; gap:6px; margin-top:10px}
 .hint button{font:inherit; font-size:13px; background:var(--bg); color:var(--ink); border:1px solid var(--line); border-radius:999px; padding:4px 10px; cursor:pointer}
 .tblwrap{overflow-x:auto}
@@ -317,17 +320,26 @@ locCtl.addTo(map);
 const legend = L.control({position:'bottomleft'});
 legend.onAdd = () => { const d = L.DomUtil.create('div','legend' + (MOBILE() ? ' closed' : '')); d.id = 'legend'; L.DomEvent.disableClickPropagation(d); d.addEventListener('click', () => d.classList.toggle('closed')); return d; };
 legend.addTo(map);
+// 건물 점 설명: 점은 보기·업종·연차와 상관없이 늘 '모든 업종 3년 생존율'
+function dotKey(trend){
+  const d = (c, r, ring) => '<i class="dot" style="width:'+r+'px;height:'+r+'px;background:'+css(c)+(ring ? ';box-shadow:0 0 0 1px #fff, 0 0 0 2px rgba(0,0,0,.25)' : '')+'"></i>';
+  return '<div class="dotkey"><b>건물 점</b> <span class="muted">(크게 확대하면)</span><br>' +
+    d('--c5', 12, 1) + d('--c3', 12, 1) + d('--c1', 12, 1) + ' 색 = 그 건물 3년 생존율<br>' +
+    '<span class="muted">초록 높음 · 빨강 낮음, 모든 업종 기준' + (trend ? ' (상권 색과 기준이 다름)' : '') + '</span><br>' +
+    d('--c4', 7, 1) + d('--c4', 14, 1) + ' 클수록 거쳐 간 가게가 많음<br>' +
+    d('--cna', 6, 0) + ' 회색 작은 점 = 기록 부족(3곳 미만)</div>';
+}
 function drawLegend(){
   if(state.mode === 'trend'){
     $('legend').innerHTML = '<b>뜨는 상권</b> · '+esc(trendSvc() === '전체' ? '음식점·카페' : trendSvc())+'<div class="rows">' +
       [['--t5','뜨는 중 (상위 20%)'],['--t4',''],['--t3','보합'],['--t2',''],['--t1','식는 중 (하위 20%)'],['--cna','자료 부족 · 개업 거의 없음']]
-      .map(([c,t]) => '<i style="background:'+css(c)+'"></i>'+t).join('<br>') + '<br><span class="note">매출 1년·유동인구 1년·가게 수 3년 변화</span></div>';
+      .map(([c,t]) => '<i style="background:'+css(c)+'"></i>'+t).join('<br>') + '<br><span class="note">매출 1년·유동인구 1년·가게 수 3년 변화</span>' + dotKey(true) + '</div>';
     return;
   }
   const b = BINS[state.y], p = x => Math.round(x*100);
   $('legend').innerHTML = '<b>'+state.y+'년 생존율</b> · '+esc(state.svc==='전체'?'모든 업종':state.svc)+'<div class="rows">'+
     [['--c5','≥'+p(b[3])+'%'],['--c4',p(b[2])+'~'+p(b[3])+'%'],['--c3',p(b[1])+'~'+p(b[2])+'%'],['--c2',p(b[0])+'~'+p(b[1])+'%'],['--c1','<'+p(b[0])+'%'],['--cna','표본 부족']]
-    .map(([c,t]) => '<i style="background:'+css(c)+'"></i>'+t).join('<br>') + '<br><span class="note">확대하면 건물별 점이 보입니다</span></div>';
+    .map(([c,t]) => '<i style="background:'+css(c)+'"></i>'+t).join('<br>') + dotKey(false) + '</div>';
 }
 
 let AREAS = [], STATS = new Map();
