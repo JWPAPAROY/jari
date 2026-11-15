@@ -468,7 +468,7 @@ let tipOn = null;
 function showTip(el, cx, cy){
   if(tipOn && tipOn !== el) tipOn.classList.remove('on');
   tipOn = el; el.classList.add('on');
-  tipEl.innerHTML = el.dataset.tip.replace(/\n/g, '<br>'); tipEl.hidden = false;
+  tipEl.innerHTML = esc(el.dataset.tip).replace(/\n/g, '<br>'); tipEl.hidden = false;
   const w = tipEl.offsetWidth, h = tipEl.offsetHeight;
   tipEl.style.left = Math.max(8, Math.min(window.innerWidth - w - 8, cx - w / 2)) + 'px';
   tipEl.style.top = (cy - h - 14 < 8 ? cy + 18 : cy - h - 14) + 'px';
