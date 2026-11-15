@@ -123,7 +123,11 @@ footer.foot p{margin:4px 0}
 dl.facts{display:grid; grid-template-columns:max-content 1fr; gap:5px 14px; margin:0; font-size:13.5px}
 dl.facts dt{color:var(--muted); font-size:12.5px}
 dl.facts dd{margin:0}
-.spark{display:block; width:100%; height:auto; margin-top:6px}
+.spark{display:block; width:100%; height:auto; margin-top:6px; touch-action:pan-y}
+.spark .hit{fill:transparent; cursor:crosshair}
+.spark .hit:hover, .spark .hit.on{fill:var(--ink); fill-opacity:.07}
+#tip{position:fixed; z-index:2000; pointer-events:none; background:var(--ink); color:var(--panel); font-size:12.5px; line-height:1.45; padding:6px 9px; border-radius:6px; box-shadow:0 4px 14px rgba(0,0,0,.25); max-width:240px; white-space:nowrap}
+#tip[hidden]{display:none}
 .legend-inline{font-size:12px; color:var(--muted)}
 .legend-inline i{display:inline-block; width:10px; height:10px; border-radius:2px; margin:0 4px 0 10px; vertical-align:-1px}
 .good{color:var(--safe)} .bad{color:var(--risk)}
@@ -399,6 +403,7 @@ function setMarker(lat, lon){ if(marker) marker.remove(); marker = L.circleMarke
 // ---------- 땅·건물 정보 (브이월드: 지적도·토지특성·개별공시지가·건물)
 const arr = x => [].concat(x || []);
 const PY = 3.3058;
+const sgnPct = x => (x >= 0 ? '+' : '') + (Math.abs(x) < .1 ? (x*100).toFixed(1) : Math.round(x*100)) + '%';
 const won = n => n >= 1e8 ? (n/1e8).toFixed(n >= 1e9 ? 0 : 1) + '억 원' : Math.round(n/1e4).toLocaleString('ko-KR') + '만 원';
 const median = a => { if(!a.length) return null; const s = [...a].sort((x,y) => x-y), m = s.length >> 1; return s.length % 2 ? s[m] : (s[m-1] + s[m]) / 2; };
 const BLD_USE = {'01':'단독주택','02':'공동주택','03':'제1종 근린생활시설','04':'제2종 근린생활시설','05':'문화·집회시설','06':'종교시설','07':'판매시설','08':'운수시설','09':'의료시설','10':'교육연구시설','11':'노유자시설','12':'수련시설','13':'운동시설','14':'업무시설','15':'숙박시설','16':'위락시설','17':'공장','18':'창고시설','20':'자동차 관련 시설','28':'관광휴게시설'};
@@ -451,6 +456,28 @@ function landStats(L){
   const cagr10 = p10 ? Math.pow(last.p / p10.p, 1/10) - 1 : null;
   return {last, ch5: p5 ? last.p / p5.p - 1 : null, cagr10, top, nearMed: median(L.near)};
 }
+// 그래프 칸(점·막대)마다 투명한 영역을 깔고, 마우스를 올리거나 탭하면 숫자를 말풍선으로 보여 줌
+function hitCols(xs, W, H, tips){
+  return xs.map((x,i) => {
+    const l = i ? (xs[i-1] + x) / 2 : 0, r = i < xs.length-1 ? (x + xs[i+1]) / 2 : W;
+    return '<rect class="hit" x="'+l.toFixed(1)+'" y="0" width="'+(r-l).toFixed(1)+'" height="'+H+'" data-tip="'+esc(tips[i])+'"/>';
+  }).join('');
+}
+const tipEl = document.createElement('div'); tipEl.id = 'tip'; tipEl.hidden = true; tipEl.setAttribute('role', 'status'); document.body.appendChild(tipEl);
+let tipOn = null;
+function showTip(el, cx, cy){
+  if(tipOn && tipOn !== el) tipOn.classList.remove('on');
+  tipOn = el; el.classList.add('on');
+  tipEl.innerHTML = el.dataset.tip.replace(/\n/g, '<br>'); tipEl.hidden = false;
+  const w = tipEl.offsetWidth, h = tipEl.offsetHeight;
+  tipEl.style.left = Math.max(8, Math.min(window.innerWidth - w - 8, cx - w / 2)) + 'px';
+  tipEl.style.top = (cy - h - 14 < 8 ? cy + 18 : cy - h - 14) + 'px';
+}
+function hideTip(){ tipEl.hidden = true; if(tipOn){ tipOn.classList.remove('on'); tipOn = null; } }
+document.addEventListener('pointermove', e => { const h = e.target.closest && e.target.closest('.hit'); if(h) showTip(h, e.clientX, e.clientY); else if(tipOn && e.pointerType === 'mouse') hideTip(); });
+document.addEventListener('click', e => { const h = e.target.closest && e.target.closest('.hit'); if(h) showTip(h, e.clientX, e.clientY); else hideTip(); });
+document.addEventListener('scroll', hideTip, true);
+
 function priceSpark(prices){
   const pts = prices.filter(x => x.y >= 2010); if(pts.length < 3) return '';
   const W = 360, H = 70, P = 4, max = Math.max(...pts.map(x => x.p)), min = Math.min(...pts.map(x => x.p));
@@ -458,6 +485,8 @@ function priceSpark(prices){
   const d = pts.map((x,i) => (i ? 'L' : 'M') + X(i).toFixed(1) + ' ' + Y(x.p).toFixed(1)).join(' ');
   return '<svg class="spark" viewBox="0 0 '+W+' '+H+'" role="img" aria-label="공시지가 추이 '+pts[0].y+'~'+pts[pts.length-1].y+'">' +
     '<path d="'+d+'" fill="none" stroke="'+css('--accent')+'" stroke-width="2"/>' +
+    pts.map((x,i) => '<circle cx="'+X(i).toFixed(1)+'" cy="'+Y(x.p).toFixed(1)+'" r="2" fill="'+css('--accent')+'"/>').join('') +
+    hitCols(pts.map((x,i) => X(i)), W, H, pts.map((x,i) => x.y + '년 공시지가\n평당 ' + won(x.p * PY) + ' (㎡당 ' + won(x.p) + ')' + (i ? '\n전년보다 ' + sgnPct(x.p / pts[i-1].p - 1) : ''))) +
     '<text x="'+P+'" y="'+(H-2)+'" font-size="10" fill="'+css('--muted')+'">'+pts[0].y+'</text>' +
     '<text x="'+(W-P)+'" y="'+(H-2)+'" font-size="10" text-anchor="end" fill="'+css('--muted')+'">'+pts[pts.length-1].y+'</text></svg>';
 }
@@ -514,11 +543,12 @@ function detailHtml(d, where){
   if(ys.some(y => y.opens || y.closes)){
     const W = 360, H = 110, max = Math.max(1, ...ys.map(y => Math.max(y.opens, y.closes))), bw = (W - 8) / ys.length;
     const bars = ys.map((y,i) => { const x = 4 + i*bw, ho = (H-26) * y.opens/max, hc = (H-26) * y.closes/max, part = y.y === cy;
-      return '<rect x="'+(x+1).toFixed(1)+'" y="'+(H-14-ho).toFixed(1)+'" width="'+(bw/2-1.5).toFixed(1)+'" height="'+ho.toFixed(1)+'" fill="'+css('--accent')+'" opacity="'+(part?.45:1)+'"><title>'+y.y+' 개업 '+y.opens+'</title></rect>' +
-        '<rect x="'+(x+bw/2).toFixed(1)+'" y="'+(H-14-hc).toFixed(1)+'" width="'+(bw/2-1.5).toFixed(1)+'" height="'+hc.toFixed(1)+'" fill="'+css('--risk')+'" opacity="'+(part?.45:1)+'"><title>'+y.y+' 폐업 '+y.closes+'</title></rect>' +
+      return '<rect x="'+(x+1).toFixed(1)+'" y="'+(H-14-ho).toFixed(1)+'" width="'+(bw/2-1.5).toFixed(1)+'" height="'+ho.toFixed(1)+'" fill="'+css('--accent')+'" opacity="'+(part?.45:1)+'"/>' +
+        '<rect x="'+(x+bw/2).toFixed(1)+'" y="'+(H-14-hc).toFixed(1)+'" width="'+(bw/2-1.5).toFixed(1)+'" height="'+hc.toFixed(1)+'" fill="'+css('--risk')+'" opacity="'+(part?.45:1)+'"/>' +
         (i % 2 === 0 || i === ys.length-1 ? '<text x="'+(x+bw/2).toFixed(1)+'" y="'+(H-2)+'" font-size="10" text-anchor="middle" fill="'+css('--muted')+'">'+String(y.y).slice(2)+'</text>' : ''); }).join('');
+    const hit = hitCols(ys.map((y,i) => 4 + i*bw + bw/2), W, H, ys.map(y => y.y + '년' + (y.y === cy ? ' (진행 중)' : '') + '\n개업 ' + y.opens + '곳 · 폐업 ' + y.closes + '곳\n' + (y.opens >= y.closes ? '순증 +' : '순감 ') + (y.opens - y.closes)));
     h += '<h2>해마다 문 연 가게 · 닫은 가게 <span class="note">· '+esc(SVC_LABEL())+'</span></h2><p class="legend-inline" style="margin:0"><i style="background:'+css('--accent')+';margin-left:0"></i>개업<i style="background:'+css('--risk')+'"></i>폐업 · 흐린 막대는 올해(진행 중)</p>' +
-      '<svg class="spark" viewBox="0 0 '+W+' '+H+'" role="img" aria-label="연도별 개업·폐업">'+bars+'</svg>';
+      '<svg class="spark" viewBox="0 0 '+W+' '+H+'" role="img" aria-label="연도별 개업·폐업">'+bars+hit+'</svg>';
   }
   // 지금 영업 중
   const on = d.open_now || [], tot = on.reduce((s,x) => s + x.n, 0);
@@ -534,14 +564,17 @@ const IX = {'다이나믹':'새 가게가 많이 들어오고 빨리 바뀌는 �
             '상권축소':'새로 연 가게가 빨리 닫는, 줄어드는 상권', '정체':'가게가 오래 머물고 변화가 적은 상권'};
 const GRADE_C = {'뜨는 중':'--t5', '보합':'--muted', '식는 중':'--t1'};
 const qlab = q => String(q).slice(2,4) + '.' + String(q).slice(4) + 'Q';
-function qChart(pts, name, cv){
+function qChart(pts, name, cv, fv){
   pts = pts.filter(x => x.v > 0); if(pts.length < 4) return '';
+  const prevY = new Map(pts.map(x => [x.q, x.v]));
+  const tips = pts.map(x => { const p = prevY.get(x.q - 10); return '20' + qlab(x.q).replace('.', '년 ').replace('Q', '분기') + '\n' + name + ' ' + fv(x.v) + (p ? '\n1년 전 같은 분기보다 ' + sgnPct(x.v / p - 1) : ''); });
   const W = 360, H = 90, P = 6, max = Math.max(...pts.map(x => x.v)), min = Math.min(...pts.map(x => x.v)) * .9;
   const X = i => P + i * (W - 2*P) / (pts.length - 1), Y = v => H - 16 - (v - min) / (max - min || 1) * (H - 26);
   const d = pts.map((x,i) => (i ? 'L' : 'M') + X(i).toFixed(1) + ' ' + Y(x.v).toFixed(1)).join(' ');
-  const dots = pts.map((x,i) => '<circle cx="'+X(i).toFixed(1)+'" cy="'+Y(x.v).toFixed(1)+'" r="2.2" fill="'+css(cv)+'"><title>'+qlab(x.q)+'</title></circle>').join('');
+  const dots = pts.map((x,i) => '<circle cx="'+X(i).toFixed(1)+'" cy="'+Y(x.v).toFixed(1)+'" r="2.2" fill="'+css(cv)+'"/>').join('');
   const labs = pts.map((x,i) => (i % 4 === 0 || i === pts.length-1) ? '<text x="'+X(i).toFixed(1)+'" y="'+(H-2)+'" font-size="10" text-anchor="middle" fill="'+css('--muted')+'">'+qlab(x.q)+'</text>' : '').join('');
-  return '<p class="note" style="margin:10px 0 0">'+name+' <span class="note">(분기별, 위아래 폭은 이 상권 안에서의 상대값)</span></p><svg class="spark" viewBox="0 0 '+W+' '+H+'" role="img" aria-label="'+name+' 분기 추이"><path d="'+d+'" fill="none" stroke="'+css(cv)+'" stroke-width="2"/>'+dots+labs+'</svg>';
+  const last = pts[pts.length-1];
+  return '<p class="note" style="margin:10px 0 0">'+name+' · 최근 분기 <b>'+fv(last.v)+'</b> <span class="note">(점에 마우스를 올리거나 누르면 분기별 숫자)</span></p><svg class="spark" viewBox="0 0 '+W+' '+H+'" role="img" aria-label="'+name+' 분기 추이"><path d="'+d+'" fill="none" stroke="'+css(cv)+'" stroke-width="2"/>'+dots+labs+hitCols(pts.map((x,i) => X(i)), W, H, tips)+'</svg>';
 }
 function trendHtml(tr, sv){
   if(!tr || !tr.t) return '<h2>상권 흐름</h2><p class="note">서울시 상권분석서비스 매출·유동인구 자료가 없는 상권입니다.</p>';
@@ -557,7 +590,8 @@ function trendHtml(tr, sv){
     '<div><small>영업 중 가게 수</small><b>'+fmt(t.n_now)+'곳</b><small>3년 전 '+fmt(t.n_3y)+'곳 ('+sgn(t.store_3y)+')</small></div>' +
     '<div><small>20·30대 매출 비중</small><b>'+(y1 != null ? Math.round(y1*100)+'%' : '—')+'</b><small>1년 전 '+(y0 != null ? Math.round(y0*100)+'%' : '—')+'</small></div></div>';
   if(t.ix_nm) h += '<p class="note" style="margin:8px 0 0">서울시 상권변화지표: <b>'+esc(t.ix_nm)+'</b> — '+esc(IX[t.ix_nm] || '')+'</p>';
-  h += qChart(tr.sa.map(x => ({q:x.q, v:x.amt})), '추정매출', '--accent') + qChart(tr.aq.map(x => ({q:x.q, v:x.flpop})), '유동인구', '--mid');
+  h += qChart(tr.sa.map(x => ({q:x.q, v:x.amt})), '추정매출', '--accent', won) +
+       qChart(tr.aq.map(x => ({q:x.q, v:x.flpop})), '유동인구', '--mid', v => v >= 1e4 ? fmt(Math.round(v/1e4)) + '만 명' : fmt(Math.round(v)) + '명');
   h += '<p class="note">매출은 서울시가 카드 결제로 추정한 값이라 물가 상승분이 섞여 있습니다. 계절 차이가 있어 같은 분기끼리(1년 전과) 비교합니다.</p>';
   return h;
 }
