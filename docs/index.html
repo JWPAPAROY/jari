@@ -179,10 +179,22 @@ window.addEventListener('scroll', () => $('toMap').classList.toggle('show', MOBI
 
 // ---------- 지도
 const map = L.map('map', {zoomControl:true, preferCanvas:true}).setView([37.5565, 126.99], 12);
-L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+// 배경 지도: 브이월드(국토교통부). 키는 vworld.kr에서 발급, 서비스 URL에 https://jwpaparoy.github.io 등록.
+// 키가 비어 있거나 타일이 계속 실패하면 OSM으로 자동 전환.
+const VWORLD_KEY = '';
+const OSM = () => L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
   maxZoom: 19, className:'basemap',
   attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-}).addTo(map);
+});
+if (VWORLD_KEY) {
+  const vw = L.tileLayer(`https://api.vworld.kr/req/wmts/1.0.0/${VWORLD_KEY}/Base/{z}/{y}/{x}.png`, {
+    minZoom: 6, maxZoom: 19, className:'basemap',
+    attribution:'&copy; <a href="https://www.vworld.kr/">브이월드</a>(국토교통부)'
+  }).addTo(map);
+  let ok = 0, bad = 0;
+  vw.on('tileload', () => ok++);
+  vw.on('tileerror', () => { if (++bad >= 6 && ok === 0) { map.removeLayer(vw); OSM().addTo(map); } });
+} else OSM().addTo(map);
 const areaLayer = L.layerGroup().addTo(map);
 const bldLayer = L.layerGroup().addTo(map);
 let marker = null;
