@@ -79,22 +79,27 @@ def _from_ecef(X, Y, Z, ell):
     return math.degrees(lat), math.degrees(lon)
 
 
-def bessel_to_grs80(lat, lon, shift):
+def bessel_to_grs80(lat, lon, shift, rot=(0, 0, 0), ppm=0):
+    """Bessel → GRS80. 7변수(Position Vector, proj towgs84와 같은 방식): 이동(m), 회전(초), 축척(ppm)."""
     X, Y, Z = _to_ecef(lat, lon, BESSEL)
-    return _from_ecef(X + shift[0], Y + shift[1], Z + shift[2], GRS80)
+    rx, ry, rz = (math.radians(v / 3600) for v in rot); k = 1 + ppm * 1e-6
+    X2 = shift[0] + k * (X - rz * Y + ry * Z)
+    Y2 = shift[1] + k * (rz * X + Y - rx * Z)
+    Z2 = shift[2] + k * (-ry * X + rx * Y + Z)
+    return _from_ecef(X2, Y2, Z2, GRS80)
 
 
-# EPSG 정의
+# EPSG 정의. 5174는 회전·축척까지 넣어야 함: 이동량 3개만 쓰면 서울에서 북쪽 약 15m·서쪽 약 8m 어긋남(2026-11-15 확인)
 VARIANTS = {
     '2097': dict(lon0=127.0, shift=(-146.43, 507.89, 681.46)),
-    '5174': dict(lon0=127.0028902777778, shift=(-115.80, 474.99, 674.11)),
+    '5174': dict(lon0=127.0028902777778, shift=(-115.80, 474.99, 674.11), rot=(1.16, -2.31, -1.63), ppm=6.43),
 }
 
 
 def localdata_to_latlon(x, y, variant):
     v = VARIANTS[variant]
     lat, lon = tm_inverse(x, y, BESSEL, v['lon0'])
-    return bessel_to_grs80(lat, lon, v['shift'])
+    return bessel_to_grs80(lat, lon, v['shift'], v.get('rot', (0, 0, 0)), v.get('ppm', 0))
 
 
 def latlon_to_5181(lat, lon):
