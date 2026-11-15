@@ -181,7 +181,7 @@ window.addEventListener('scroll', () => $('toMap').classList.toggle('show', MOBI
 const map = L.map('map', {zoomControl:true, preferCanvas:true}).setView([37.5565, 126.99], 12);
 // 배경 지도: 브이월드(국토교통부). 키는 vworld.kr에서 발급, 서비스 URL에 https://jwpaparoy.github.io 등록.
 // 키가 비어 있거나 타일이 계속 실패하면 OSM으로 자동 전환.
-const VWORLD_KEY = '';
+const VWORLD_KEY = 'CE384C63-0379-4E16-AAD1-07D71783B166';
 const OSM = () => L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
   maxZoom: 19, className:'basemap',
   attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
