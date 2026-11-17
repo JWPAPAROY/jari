@@ -25,7 +25,7 @@
   --accent:#6fb3cf; --accent-soft:#1d3440; --risk:#ec7a70; --risk-soft:#3a2120; --safe:#6cc58f; --safe-soft:#1b3326; --mid:#d6b45a; --cna:#4a5862; --t1:#e0675b; --t2:#9a5a4e; --t3:#56636c; --t4:#4f7fae; --t5:#7fb4ee; color-scheme:dark}}
 *{box-sizing:border-box}
 html,body{height:100%}
-body{margin:0; background:var(--bg); color:var(--ink); font:15px/1.55 var(--f-body)}
+body{margin:0; background:var(--bg); color:var(--ink); font:15px/1.55 var(--f-body); display:flex; flex-direction:column}
 .num{font-family:var(--f-num); font-variant-numeric:tabular-nums}
 header{display:flex; gap:10px; align-items:center; flex-wrap:wrap; padding:10px max(14px,env(safe-area-inset-left)) 10px max(14px,env(safe-area-inset-right)); background:var(--panel); border-bottom:1px solid var(--line); position:relative; z-index:1000}
 .brand{font-weight:700; font-size:18px; letter-spacing:-.01em; white-space:nowrap}
@@ -42,20 +42,33 @@ select{font:inherit; font-size:14px; color:var(--ink); background:var(--bg); bor
 .seg{display:inline-flex; border:1px solid var(--line); border-radius:8px; overflow:hidden}
 .seg button{font:inherit; font-size:13px; background:var(--bg); color:var(--ink); border:0; padding:7px 10px; cursor:pointer}
 .seg button[aria-pressed="true"]{background:var(--accent); color:var(--panel)}
-main{display:grid; grid-template-columns:minmax(0,1fr) 420px; height:calc(100% - 58px)}
-#map{height:100%; min-height:300px; background:var(--bg)}
-aside{overflow:auto; background:var(--panel); border-left:1px solid var(--line); padding:18px max(18px,env(safe-area-inset-right)) 40px 18px}
+main{display:grid; grid-template-columns:minmax(0,1fr) 420px; flex:1; min-height:0}
+#map{height:100%; min-height:300px; background:var(--bg); position:relative; z-index:0}
+#sheet{background:var(--panel); border-left:1px solid var(--line); display:flex; flex-direction:column; min-height:0}
+#panel{overflow:auto; flex:1; min-height:0; padding:18px max(18px,env(safe-area-inset-right)) 40px 18px; overscroll-behavior:contain}
+.grab{display:none}
 @media (max-width:860px){
-  header{gap:8px; padding-top:max(8px,env(safe-area-inset-top)); padding-bottom:8px; position:sticky; top:0}
+  html,body{height:100dvh; overflow:hidden}
+  header{gap:8px; padding-top:max(8px,env(safe-area-inset-top)); padding-bottom:8px}
   .brand span{display:none}
   .searchbox{order:3; flex-basis:100%}
   .searchbox input{font-size:16px; padding:10px 12px}
-  .ctl{margin-left:auto}
+  /* 한 줄: 이름 + 보기 / 둘째 줄: 업종 + 연차 / 셋째 줄: 검색 */
+  .ctl{display:contents}
+  #mode{margin-left:auto}
+  #svc{order:1; flex:1 1 auto; min-width:0}
+  #yrs{order:1}
   select{font-size:14px; padding:6px}
   .seg button{padding:6px 9px}
-  main{display:block; height:auto}
-  #map{height:46vh; min-height:260px}
-  aside{border-left:0; border-top:1px solid var(--line); padding:16px max(16px,env(safe-area-inset-right)) calc(72px + env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left))}
+  main{display:block; position:relative}
+  #map{position:absolute; inset:0; height:auto; min-height:0}
+  /* 결과는 지도 위로 끌어 올리는 시트: 살짝(peek)·절반(half)·전체(full) */
+  #sheet{position:absolute; left:0; right:0; bottom:0; height:50%; z-index:10; border-left:0; border-radius:14px 14px 0 0; box-shadow:0 -4px 18px rgba(0,0,0,.18); transition:height .22s ease}
+  #sheet.drag{transition:none}
+  .grab{display:flex; justify-content:center; align-items:center; height:26px; flex:none; cursor:grab; touch-action:none}
+  .grab i{width:40px; height:5px; border-radius:3px; background:var(--line)}
+  #panel{padding:2px max(16px,env(safe-area-inset-right)) calc(76px + env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left))}
+  .leaflet-bottom{bottom:var(--shpx, 0px)}
   h1{font-size:19px}
   .surv b{font-size:22px}
   .legend{font-size:11px; padding:6px 8px; line-height:1.35}
@@ -89,12 +102,6 @@ table.cmp small{display:block; color:var(--muted); font-size:11.5px; font-weight
 .cmpsum{display:grid; gap:8px; margin-top:12px}
 .cmpsum div{background:var(--bg); border-radius:8px; padding:9px 11px; font-size:13px}
 @media (max-width:480px){ table.cmp{font-size:12px} table.cmp th:first-child, table.cmp td:first-child{width:26%} }
-#toMap{display:none}
-@media (max-width:860px){
-  #toMap{position:fixed; right:max(14px,env(safe-area-inset-right)); bottom:calc(14px + env(safe-area-inset-bottom)); z-index:1100; font:inherit; font-size:14px; font-weight:500;
-    background:var(--accent); color:var(--panel); border:0; border-radius:999px; padding:10px 16px; box-shadow:0 4px 14px rgba(0,0,0,.25); cursor:pointer}
-  #toMap.show{display:block}
-}
 h1{font-size:20px; line-height:1.3; margin:0; text-wrap:balance}
 h2{font-size:15px; margin:22px 0 8px}
 .sub{color:var(--muted); font-size:13px; margin:2px 0 0}
@@ -162,6 +169,25 @@ dl.facts dd{margin:0}
 .kpis small{color:var(--muted); font-size:12px}
 tr.go{cursor:pointer} tr.go:hover td{background:var(--accent-soft)}
 .panel-ctl{display:flex; gap:6px; flex-wrap:wrap; margin:8px 0 0}
+h3{font-size:14px; margin:16px 0 6px}
+/* 접는 구역 */
+details.sec{border-top:1px solid var(--line); margin-top:14px}
+details.sec > summary{list-style:none; display:flex; align-items:center; justify-content:space-between; gap:8px; cursor:pointer; padding:12px 0 4px}
+details.sec > summary::-webkit-details-marker{display:none}
+details.sec > summary h2{margin:0}
+details.sec > summary::after{content:""; width:8px; height:8px; border-right:2px solid var(--muted); border-bottom:2px solid var(--muted); transform:rotate(45deg); margin:0 4px 4px 0; transition:transform .15s; flex:none}
+details.sec[open] > summary::after{transform:rotate(-135deg); margin-bottom:-2px}
+details.sec > summary:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
+details.sec .sbody{padding-bottom:4px}
+/* 주변 형편 요약 */
+.kp b{font-size:18px}
+.kp .grade{font-size:13px; vertical-align:2px}
+.chips{display:flex; gap:6px; flex-wrap:wrap; margin-top:10px}
+.chips button{font:inherit; font-size:13px; background:var(--bg); color:var(--ink); border:1px solid var(--line); border-radius:999px; padding:4px 11px; cursor:pointer}
+.chips button[aria-pressed="true"]{background:var(--accent); color:var(--panel); border-color:var(--accent)}
+.mixbar{display:flex; height:10px; border-radius:3px; overflow:hidden; margin:6px 0 4px}
+.mixbar i{display:block; height:100%}
+.btn-go{font:inherit; font-size:13px; margin-top:8px; background:var(--accent); color:var(--panel); border:0; border-radius:999px; padding:6px 14px; cursor:pointer}
 </style>
 </head>
 <body>
@@ -172,7 +198,7 @@ tr.go{cursor:pointer} tr.go:hover td{background:var(--accent-soft)}
     <div class="results" id="results" hidden></div>
   </div>
   <div class="ctl">
-    <div class="seg" id="mode" role="group" aria-label="보기"><button type="button" data-m="surv" aria-pressed="true">생존율</button><button type="button" data-m="trend" aria-pressed="false">뜨는 상권</button></div>
+    <div class="seg" id="mode" role="group" aria-label="보기"><button type="button" data-m="surv" aria-pressed="true">생존율</button><button type="button" data-m="trend" aria-pressed="false">뜨는 상권</button><button type="button" data-m="stay" aria-pressed="false">민박</button></div>
     <select id="svc" aria-label="업종">
       <option value="전체">모든 업종</option>
       <optgroup label="외식"><option>한식</option><option>커피·음료</option><option>호프·주점</option><option>분식</option><option>양식</option>
@@ -190,11 +216,10 @@ tr.go{cursor:pointer} tr.go:hover td{background:var(--accent-soft)}
     </div>
   </div>
 </header>
-<main>
+<main id="main">
   <div id="map" role="region" aria-label="지도"></div>
-  <aside id="panel" aria-live="polite"><p class="loading">불러오는 중…</p></aside>
+  <aside id="sheet"><div class="grab" id="grab" role="button" tabindex="0" aria-label="결과 창 크기 바꾸기"><i></i></div><div id="panel" aria-live="polite"><p class="loading">불러오는 중…</p></div></aside>
 </main>
-<button type="button" id="toMap">지도 보기</button>
 <div id="cmpbar" role="region" aria-label="비교함"><span id="cmpn"></span><button type="button" class="go" id="cmpgo">비교하기</button><button type="button" class="clr" id="cmpclr" aria-label="비교함 비우기">비우기</button></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
@@ -234,13 +259,57 @@ function color(rate){
 }
 const MIN_AREA = 15, MIN_BLD = 3;
 const MOBILE = () => window.matchMedia('(max-width:860px)').matches;
-// 모바일: 결과를 띄우면 패널로 내려가고, '지도 보기'로 다시 올라감
-function toPanel(){ if(MOBILE()) $('panel').scrollIntoView({behavior:'smooth', block:'start'}); }
-$('toMap').addEventListener('click', () => window.scrollTo({top:0, behavior:'smooth'}));
-window.addEventListener('scroll', () => $('toMap').classList.toggle('show', MOBILE() && window.scrollY > window.innerHeight * .35), {passive:true});
+// ---------- 모바일 결과 시트: 손잡이를 끌거나 눌러 살짝·절반·전체로. 지도 아래쪽 컨트롤은 시트 위에 머문다
+let sheetState = 'half';
+const sheetSizes = () => { const h = $('main').clientHeight; return {peek: Math.min(150, h * .28), half: Math.round(h * .5), full: h - 4}; };
+function setSheet(st, px){
+  const sh = $('sheet');
+  if(!MOBILE()){ sh.style.height = ''; $('main').style.removeProperty('--shpx'); return; }
+  const z = sheetSizes(), v = px ?? z[st];
+  sh.style.height = v + 'px';
+  $('main').style.setProperty('--shpx', Math.min(v, z.half) + 'px');
+  if(st) sheetState = st;
+}
+// 새 결과: 맨 위부터, 모바일에서 시트가 내려가 있으면 절반까지 올림
+function toPanel(){ $('panel').scrollTop = 0; if(MOBILE() && sheetState === 'peek') setSheet('half'); }
+(() => {
+  const sh = $('sheet'), g = $('grab');
+  let y0 = null, h0 = 0, moved = false;
+  const start = y => { y0 = y; h0 = sh.getBoundingClientRect().height; moved = false; sh.classList.add('drag'); };
+  const move = y => { if(y0 == null) return; const dy = y - y0; if(Math.abs(dy) > 5) moved = true; const z = sheetSizes(); setSheet(null, Math.max(z.peek * .8, Math.min(z.full, h0 - dy))); };
+  const end = () => {
+    if(y0 == null) return; sh.classList.remove('drag'); y0 = null;
+    const z = sheetSizes(), h = sh.getBoundingClientRect().height;
+    if(!moved) return setSheet(sheetState === 'full' ? 'half' : sheetState === 'half' ? 'full' : 'half');
+    setSheet(Object.keys(z).sort((a, b) => Math.abs(z[a] - h) - Math.abs(z[b] - h))[0]);
+  };
+  g.addEventListener('pointerdown', e => { if(!MOBILE()) return; g.setPointerCapture(e.pointerId); start(e.clientY); });
+  g.addEventListener('pointermove', e => move(e.clientY));
+  g.addEventListener('pointerup', end); g.addEventListener('pointercancel', end);
+  g.addEventListener('keydown', e => { if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); setSheet(sheetState === 'full' ? 'peek' : sheetState === 'half' ? 'full' : 'half'); } });
+  // 목록 맨 위에서 아래로 쓸어내리면 시트도 내려감
+  const P = $('panel'); let ty = null;
+  P.addEventListener('touchstart', e => { ty = P.scrollTop <= 0 ? e.touches[0].clientY : null; }, {passive:true});
+  P.addEventListener('touchmove', e => {
+    if(ty == null || !MOBILE()) return;
+    const y = e.touches[0].clientY;
+    if(y0 == null && y - ty > 14 && P.scrollTop <= 0) start(ty);
+    if(y0 != null){ e.preventDefault(); move(y); }
+  }, {passive:false});
+  P.addEventListener('touchend', () => { ty = null; end(); });
+  window.addEventListener('resize', () => setSheet(sheetState));
+  setSheet('half');
+})();
 
 // ---------- 지도
 const map = L.map('map', {zoomControl:true, preferCanvas:true}).setView([37.5565, 126.99], 12);
+// 모바일에서는 시트에 가리지 않게, 보이는 지도 영역의 가운데로 옮김
+setTimeout(() => { if(MOBILE()) map.panBy([0, (parseFloat($('main').style.getPropertyValue('--shpx')) || 0) / 2], {animate:false}); }, 0);   // 처음 화면도 시트 위 영역 가운데
+function fly(lat, lon, z){
+  const off = MOBILE() ? (parseFloat($('main').style.getPropertyValue('--shpx')) || 0) / 2 : 0;
+  const c = off ? map.unproject(map.project([lat, lon], z).add([0, off]), z) : L.latLng(lat, lon);
+  map.flyTo(c, z, {duration:.6});
+}
 // 배경 지도: 브이월드(국토교통부). 키는 vworld.kr에서 발급, 서비스 URL에 https://jwpaparoy.github.io 등록.
 // 키가 비어 있거나 타일이 계속 실패하면 OSM으로 자동 전환.
 const VWORLD_KEY = 'CE384C63-0379-4E16-AAD1-07D71783B166';
@@ -311,7 +380,7 @@ locCtl.onAdd = () => {
       b.classList.remove('busy');
       const {latitude:lat, longitude:lon} = pos.coords;
       if(!SEOUL_BOX.contains([lat, lon])){ toast('지금 위치가 서울 밖이라 자료가 없습니다.'); return; }
-      map.flyTo([lat, lon], 17, {duration:.6});
+      fly(lat, lon, 17);
       showPoint(lat, lon, '내 위치 주변');
     }, err => {
       b.classList.remove('busy');
@@ -335,6 +404,7 @@ function dotKey(trend){
     d('--cna', 6, 0) + ' 회색 작은 점 = 기록 부족('+state.y+'년 지난 가게 3곳 미만)</div>';
 }
 function drawLegend(){
+  if(state.mode === 'stay') return stayLegend();
   if(state.mode === 'trend'){
     $('legend').innerHTML = '<b>뜨는 상권</b> · '+esc(trendLab())+'<div class="rows">' +
       [['--t5','뜨는 중 (상위 20%)'],['--t4',''],['--t3','보합'],['--t2',''],['--t1','식는 중 (하위 20%)'],['--cna','자료 부족 · 개업 거의 없음']]
@@ -374,6 +444,8 @@ const sgn = x => x == null ? '—' : (x >= 0 ? '+' : '') + Math.round(x*100) + '
 function rateOf(r){ if(!r) return null; const o = r['o'+state.y], s = r['s'+state.y]; return o >= MIN_AREA ? s/o : null; }
 function drawAreas(){
   areaLayer.clearLayers();
+  if(state.mode === 'stay'){ drawDongs(); return; }
+  dongLayer.clearLayers(); stayLayer.clearLayers(); hlLayer.clearLayers();
   for(const a of AREAS){
     if(!a.geom) continue;
     let c, tip;
@@ -396,6 +468,7 @@ let bldTimer = null, bldTok = 0, BLD_RAW = [];
 async function drawBuildings(){
   bldLayer.clearLayers();
   const tok = ++bldTok;
+  if(state.mode === 'stay') return drawStays();
   if(map.getZoom() < 16) return;
   const b = map.getBounds();
   BLD_RAW = await rpc('buildings_view', {min_lat:b.getSouth(), min_lon:b.getWest(), max_lat:b.getNorth(), max_lon:b.getEast()});
@@ -406,7 +479,7 @@ function color3(rate){ const y = state.y; state.y = 3; const c = color(rate); st
 // 점 색 = 위쪽에서 고른 연차(1·2·3년)의 그 건물 생존율(모든 업종). 연차를 바꾸면 다시 받지 않고 다시 칠함
 function paintBuildings(){
   bldLayer.clearLayers();
-  if(map.getZoom() < 16) return;
+  if(map.getZoom() < 16 || state.mode === 'stay') return;
   const y = state.y;
   for(const [jkey, lat, lon, n, n_open, o3, s3, o1, s1, o2, s2] of BLD_RAW){
     const o = [0, o1, o2, o3][y], s = [0, s1, s2, s3][y];
@@ -420,8 +493,11 @@ function paintBuildings(){
   }
 }
 map.on('moveend', () => { clearTimeout(bldTimer); bldTimer = setTimeout(drawBuildings, 250); });
-map.on('zoomend', () => areaLayer.eachLayer(l => l.setStyle({fillOpacity: map.getZoom() >= 16 ? .12 : .45})));
-map.on('click', e => { if(map.getZoom() >= 15) showPoint(e.latlng.lat, e.latlng.lng); });
+map.on('zoomend', () => { areaLayer.eachLayer(l => l.setStyle({fillOpacity: map.getZoom() >= 16 ? .12 : .45})); dongLayer.eachLayer(l => l.setStyle({fillOpacity: map.getZoom() >= 15 ? .1 : .42})); });
+map.on('click', e => {
+  if(state.mode === 'stay'){ const d = dongAt(e.latlng.lat, e.latlng.lng); if(d) showDong(d.cd); return; }
+  if(map.getZoom() >= 15) showPoint(e.latlng.lat, e.latlng.lng);
+});
 
 // ---------- 패널 공통
 function survBlock(r, title){
@@ -580,7 +656,7 @@ const SVC_LABEL = () => state.svc === '전체' ? '모든 업종' : state.svc ===
 const G_NAME = {floor:'층', size:'면적', chain:'운영'};
 function detailHtml(d, where){
   if(!d) return '';
-  let h = '<h2>조건별 3년 생존 <span class="note">· '+esc(where)+' · '+esc(SVC_LABEL())+'</span></h2>';
+  let h = '<p class="note" style="margin:0 0 6px">층·면적·운영 방식별 3년 생존 · '+esc(where)+' · '+esc(SVC_LABEL())+'</p>';
   if(!d.groups.some(g => g.o3 > 0)) h += '<p class="note">조건별로 나눌 만큼 기록이 없습니다.</p>';
   else {
     h += '<div class="tblwrap"><table><thead><tr><th>조건</th><th></th><th class="r">1년</th><th class="r">3년</th><th class="col-bar" style="width:70px"></th><th class="r">3년 표본</th></tr></thead><tbody>';
@@ -601,14 +677,14 @@ function detailHtml(d, where){
         '<rect x="'+(x+bw/2).toFixed(1)+'" y="'+(H-14-hc).toFixed(1)+'" width="'+(bw/2-1.5).toFixed(1)+'" height="'+hc.toFixed(1)+'" fill="'+css('--risk')+'" opacity="'+(part?.45:1)+'"/>' +
         (i % 2 === 0 || i === ys.length-1 ? '<text x="'+(x+bw/2).toFixed(1)+'" y="'+(H-2)+'" font-size="10" text-anchor="middle" fill="'+css('--muted')+'">'+String(y.y).slice(2)+'</text>' : ''); }).join('');
     const hit = hitCols(ys.map((y,i) => 4 + i*bw + bw/2), W, H, ys.map(y => y.y + '년' + (y.y === cy ? ' (진행 중)' : '') + '\n개업 ' + y.opens + '곳 · 폐업 ' + y.closes + '곳\n' + (y.opens >= y.closes ? '순증 +' : '순감 ') + (y.opens - y.closes)));
-    h += '<h2>해마다 문 연 가게 · 닫은 가게 <span class="note">· '+esc(SVC_LABEL())+'</span></h2><p class="legend-inline" style="margin:0"><i style="background:'+css('--accent')+';margin-left:0"></i>개업<i style="background:'+css('--risk')+'"></i>폐업 · 흐린 막대는 올해(진행 중)</p>' +
+    h += '<h3>해마다 문 연 가게 · 닫은 가게 <span class="note">· '+esc(SVC_LABEL())+'</span></h3><p class="legend-inline" style="margin:0"><i style="background:'+css('--accent')+';margin-left:0"></i>개업<i style="background:'+css('--risk')+'"></i>폐업 · 흐린 막대는 올해(진행 중)</p>' +
       '<svg class="spark" viewBox="0 0 '+W+' '+H+'" role="img" aria-label="연도별 개업·폐업">'+bars+hit+'</svg>';
   }
   // 지금 영업 중
   const on = d.open_now || [], tot = on.reduce((s,x) => s + x.n, 0);
   if(tot){
-    if(state.svc === '전체') h += '<h2>지금 영업 중인 가게 '+fmt(tot)+'곳</h2><p class="note" style="margin:0">' + on.slice(0,7).map(x => esc(x.svc === '기타' ? '기타' : x.svc)+' <b class="num">'+x.n+'</b>').join(' · ') + '</p>';
-    else { const m = on.find(x => x.svc === state.svc); h += '<h2>지금 영업 중인 '+esc(SVC_LABEL())+'</h2><p style="margin:0"><b class="num">'+(m ? m.n : 0)+'곳</b> <span class="note">· 모든 업종 '+fmt(tot)+'곳 중 '+Math.round(100*(m ? m.n : 0)/tot)+'%</span></p>'; }
+    if(state.svc === '전체') h += '<h3>지금 영업 중인 가게 '+fmt(tot)+'곳</h3><p class="note" style="margin:0">' + on.slice(0,7).map(x => esc(x.svc === '기타' ? '기타' : x.svc)+' <b class="num">'+x.n+'</b>').join(' · ') + '</p>';
+    else { const m = on.find(x => x.svc === state.svc); h += '<h3>지금 영업 중인 '+esc(SVC_LABEL())+'</h3><p style="margin:0"><b class="num">'+(m ? m.n : 0)+'곳</b> <span class="note">· 모든 업종 '+fmt(tot)+'곳 중 '+Math.round(100*(m ? m.n : 0)/tot)+'%</span></p>'; }
   }
   return h;
 }
@@ -631,10 +707,10 @@ function qChart(pts, name, cv, fv){
   return '<p class="note" style="margin:10px 0 0">'+name+' · 최근 분기 <b>'+fv(last.v)+'</b> <span class="note">(점에 마우스를 올리거나 누르면 분기별 숫자)</span></p><svg class="spark" viewBox="0 0 '+W+' '+H+'" role="img" aria-label="'+name+' 분기 추이"><path d="'+d+'" fill="none" stroke="'+css(cv)+'" stroke-width="2"/>'+dots+labs+hitCols(pts.map((x,i) => X(i)), W, H, tips)+'</svg>';
 }
 function trendHtml(tr, sv){
-  if(!tr || !tr.t) return '<h2>상권 흐름</h2><p class="note">서울시 상권분석서비스 매출·유동인구 자료가 없는 상권입니다.</p>';
+  if(!tr || !tr.t) return '<p class="note">서울시 상권분석서비스 매출·유동인구 자료가 없는 상권입니다.</p>';
   const t = tr.t, sh = (a,b) => a && b ? a/b : null;
   const y1 = sh(t.y_now, t.s_now), y0 = sh(t.y_prev, t.s_prev);
-  let h = '<h2>상권 흐름 <span class="note">· '+esc(trendLab())+' · '+qlab(t.q_last)+'까지</span></h2>';
+  let h = '<p class="note" style="margin:0 0 6px">'+esc(trendLab())+' · '+qlab(t.q_last)+'까지</p>';
   h += '<p style="margin:0">' + (t.grade ? '<span class="grade" style="background:'+css(GRADE_C[t.grade])+'">'+esc(t.grade)+'</span> ' : '') +
        (t.score != null ? '<span class="note">서울 상권 중 상위 '+Math.max(1, Math.round((1 - t.score) * 100))+'%</span> ' : '<span class="note">비교할 자료가 부족합니다</span> ') +
        (t.flag ? '<span class="flagchip">'+esc(t.flag)+'</span>' : '') + '</p>';
@@ -703,6 +779,49 @@ function turnover(hist){
   return {closes: closes.length, gapMed: median(gaps), unfilled, lifeMed: median(closes.map(x => x.life_days))};
 }
 let panelTok = 0;
+// ---------- 접는 구역: 사용자가 열고 닫은 상태는 구역별로 기억
+let SEC = {}; try{ SEC = JSON.parse(localStorage.getItem('jari.sec') || '{}'); }catch(e){}
+function sec(key, title, inner, open, hidden){
+  const o = key in SEC ? SEC[key] : open;
+  return '<details class="sec" data-k="'+key+'"'+(o ? ' open' : '')+(hidden ? ' hidden' : '')+'><summary><h2>'+title+'</h2></summary><div class="sbody">'+inner+'</div></details>';
+}
+document.addEventListener('toggle', e => {
+  const d = e.target; if(!d.matches || !d.matches('details.sec') || !d.isConnected || d.dataset.init) return;
+  SEC[d.dataset.k] = d.open; try{ localStorage.setItem('jari.sec', JSON.stringify(SEC)); }catch(err){}
+}, true);
+const showSec = id => { const d = $(id) && $(id).closest('details.sec'); if(d) d.hidden = false; };
+// ---------- 주변 형편 요약(임대료·공실률·상권 흐름·외국인 민박): 자료가 오는 대로 채움
+function kpiRow(){
+  return '<div class="kpis kp" id="kp">' + [['rent','평당 월세'],['vac','공실률'],['tr','상권 흐름'],['stay','외국인 민박']]
+    .map(([k,l]) => '<div id="kp-'+k+'"><small>'+l+'</small><b>…</b><small class="kps">&nbsp;</small></div>').join('') + '</div>';
+}
+function kpSet(tok, k, val, sub){
+  if(tok !== panelTok) return; const el = $('kp-'+k); if(!el) return;
+  el.querySelector('b').innerHTML = val; el.querySelector('.kps').innerHTML = sub || '&nbsp;';
+}
+function kpTrend(tok, t){
+  if(!t || t.score == null) return kpSet(tok, 'tr', '—', '매출 자료 없음');
+  kpSet(tok, 'tr', '<span class="grade" style="background:'+css(GRADE_C[t.grade])+'">'+esc(t.grade)+'</span>', '매출 1년 '+sgn(t.sales_yoy)+' · 상위 '+Math.max(1, Math.round((1 - t.score)*100))+'%');
+}
+async function fillTrendKp(tok, code){
+  if(!code) return kpTrend(tok, null);
+  const [t] = await rest('area_trend?select=score,grade,sales_yoy&code=eq.' + code + '&svc=eq.' + encodeURIComponent(trendSvc())).catch(() => []);
+  kpTrend(tok, t);
+}
+// 주변 외국인 민박(도시민박·한옥체험): 요약 칸 + 접는 구역, '민박 지도'로 넘어가는 단추
+async function fillStay(tok, lat, lon, r){
+  const st = await rpc('stay_near', {p_lat:lat, p_lon:lon, p_r:r}).catch(() => null);
+  if(tok !== panelTok) return;
+  if(!st) return kpSet(tok, 'stay', '—', '');
+  kpSet(tok, 'stay', fmt(st.n_open) + '곳', '반경 '+r+'m · 객실 '+fmt(st.rooms));
+  const el = $('st'); if(!el || (!st.n_open && !st.o3)) return;
+  showSec('st');
+  const lines = ['반경 '+r+'m에 영업 중인 외국인 민박 <b>'+fmt(st.n_open)+'곳</b>(객실 '+fmt(st.rooms)+'개)'];
+  if(st.new1 || st.close1) lines.push('최근 1년 새로 등록 <b>'+fmt(st.new1)+'곳</b> · 폐업 '+fmt(st.close1)+'곳');
+  if(st.o3 >= 5) lines.push('3년이 지난 민박 '+fmt(st.o3)+'곳 중 <b>'+pct(st.s3, st.o3)+'</b>가 아직 영업 중');
+  el.innerHTML = '<p style="margin:0">'+lines.join('<br>')+'</p>' + (st.dong ? '<button type="button" class="btn-go" data-dong="'+esc(st.dong)+'">민박 지도에서 이 동 보기</button>' : '');
+  const b = el.querySelector('[data-dong]'); if(b) b.onclick = () => goStay(b.dataset.dong);
+}
 
 // ---------- 비교 (최대 3곳: 상권 a · 건물 b · 위치 p). 주소창 #cmp=... 로 공유
 const CMP_MAX = 3;
@@ -883,16 +1002,27 @@ async function showTrendHome(){
   $('panel').querySelectorAll('tr[data-code]').forEach(r => r.onclick = () => showArea(r.dataset.code));
 }
 async function showHome(){
+  if(state.mode === 'stay') return showStayHome();
   if(state.mode === 'trend') return showTrendHome();
   const rows = await rpc('seoul_stats', {});
   const all = rows.find(r => r.svc === '전체') || {};
   $('panel').innerHTML = '<h1>서울 가게들, 몇 년 버텼나</h1><p class="sub">2016년 이후 문을 연 가게 기준 · 주소나 상권을 검색하거나 지도를 눌러 보세요</p>' +
     survBlock(all, '') +
     '<div class="hint">' + ['망원동 415','연남동','송리단길','성수동2가','을지로3가'].map(t => '<button type="button" data-q="'+t+'">'+t+'</button>').join('') + '</div>' +
+    '<h2>업종 바로 고르기</h2>' + svcChips(rows) +
     '<h2>업종별로 보면</h2>' + svcTable(rows, 100) + FOOT;
   $('panel').querySelectorAll('[data-q]').forEach(b => b.onclick = () => { $('q').value = b.dataset.q; doSearch(b.dataset.q, true); });
+  $('panel').querySelectorAll('[data-svc]').forEach(b => b.onclick = () => { $('svc').value = b.dataset.svc; $('svc').dispatchEvent(new Event('change')); });
+  toPanel();
 }
 
+// 업종 바로 고르기: 최근에 고른 업종 + 기록이 많은 업종
+function svcChips(rows){
+  let recent = []; try{ recent = JSON.parse(localStorage.getItem('jari.svcs') || '[]'); }catch(e){}
+  const top = rows.filter(r => r.svc !== '전체' && r.svc !== '기타').sort((a, b) => b.o3 - a.o3).map(r => r.svc);
+  const list = ['전체', ...new Set([...recent, ...top])].filter(v => [...$('svc').options].some(o => o.value === v)).slice(0, 10);
+  return '<div class="chips">' + list.map(v => '<button type="button" data-svc="'+esc(v)+'" aria-pressed="'+(v === state.svc)+'">'+esc(v === '전체' ? '모든 업종' : v)+'</button>').join('') + '</div>';
+}
 // ---------- 상권
 // ---------- 방문 통계(쿠키 없음, 횟수만) · 주소창 링크(#a=상권, #b=건물, &s=업종)
 const SRC = (() => { const r = document.referrer; if(!r) return 'direct';
@@ -908,16 +1038,19 @@ function setLink(k, id){
   try{ history.replaceState(null, '', location.pathname + (k ? '#' + k + '=' + encodeURIComponent(id) + (state.svc !== '전체' ? '&s=' + encodeURIComponent(state.svc) : '') : '')); }catch(e){}
 }
 function readLink(){
-  const m = decodeURIComponent(location.hash || '').match(/^#([ab])=([^&]+)(?:&s=(.+))?$/);
+  const m = decodeURIComponent(location.hash || '').match(/^#([abd])=([^&]+)(?:&s=(.+))?$/);
   return m ? {k:m[1], id:m[2], s:m[3] || null} : null;
 }
 // ---------- 임대료·공실률(한국부동산원 표본조사, 가까운 조사 상권 값)
 async function fillRent(tok, code){
+  const none = () => { kpSet(tok, 'rent', '—', '조사 상권과 멀어 자료 없음'); kpSet(tok, 'vac', '—', ''); };
+  if(!code) return none();
   const [ar] = await rest('area_rent?select=region,dist&code=eq.' + encodeURIComponent(code)).catch(() => []);
-  if(!ar || tok !== panelTok) return;
+  if(tok !== panelTok) return;
+  if(!ar) return none();
   const rows = await rest('rent?select=region,q,kind,rent,vac&region=in.(' + encodeURIComponent('"' + ar.region + '","서울"') + ')&order=q').catch(() => []);
-  const el = $('rn'); if(tok !== panelTok || !el || !rows.length) return;
-  const mine = rows.filter(r => r.region === ar.region); if(!mine.length) return;
+  const el = $('rn'); if(tok !== panelTok || !el) return;
+  const mine = rows.filter(r => r.region === ar.region); if(!mine.length) return none();
   const last = Math.max(...mine.map(r => r.q));
   const get = (reg, q, k) => rows.find(r => r.region === reg && r.q === q && r.kind === k);
   const py = v => (v * 3.3058 / 10).toFixed(1);   // 천원/㎡ → 만원/평
@@ -930,9 +1063,13 @@ async function fillRent(tok, code){
       '<td class="r num">' + (now.vac == null ? '—' : now.vac.toFixed(1) + '%') + '</td>' +
       '<td class="r num note">' + (se && se.vac != null ? se.vac.toFixed(1) + '%' : '—') + '</td></tr>';
   }).join('');
-  if(!lines) return;
-  const small = get(ar.region, last, '소규모');
-  el.innerHTML = '<h2>임대료·공실률 <span class="note">· 가까운 조사 상권 <b>' + esc(ar.region) + '</b>' + (ar.dist > 300 ? '(' + fmt(Math.round(ar.dist / 100) * 100) + 'm)' : '') + ' · ' + qlab(last) + '</span></h2>' +
+  if(!lines) return none();
+  const small = get(ar.region, last, '소규모'), sse = get('서울', last, '소규모');
+  const kr = small && small.rent ? small : get(ar.region, last, '중대형');
+  kpSet(tok, 'rent', py(kr.rent) + '만원', (kr === small ? '소규모 상가' : '중대형 상가') + ' · ' + esc(ar.region));
+  kpSet(tok, 'vac', kr.vac == null ? '—' : kr.vac.toFixed(1) + '%', sse && sse.vac != null && kr === small ? '서울 소규모 ' + sse.vac.toFixed(1) + '%' : qlab(last));
+  showSec('rn');
+  el.innerHTML = '<p class="note" style="margin:0 0 6px">가까운 한국부동산원 조사 상권 <b>' + esc(ar.region) + '</b>' + (ar.dist > 300 ? '(' + fmt(Math.round(ar.dist / 100) * 100) + 'm)' : '') + ' · ' + qlab(last) + '</p>' +
     '<div class="tblwrap"><table><thead><tr><th></th><th class="r">평당 월세</th><th class="r">1년 변화</th><th class="r">공실률</th><th class="r">서울 공실률</th></tr></thead><tbody>' + lines + '</tbody></table></div>' +
     (small && small.rent ? '<p class="note" style="margin:6px 0 0">소규모 상가 기준으로 10평이면 월 약 <b>' + Math.round(small.rent * 33.058 / 10) + '만원</b>, 20평이면 약 <b>' + Math.round(small.rent * 66.116 / 10) + '만원</b>입니다. 한국부동산원 표본조사 평균이라 층·위치에 따라 실제 시세와 차이가 큽니다.</p>' : '');
 }
@@ -945,7 +1082,8 @@ async function fillAcademy(tok, args, jkey, where){
   ]);
   const el = $('ac'); if(tok !== panelTok || !el || !st || (!st.open && !list.length)) return;
   const f = (st.fields || []).slice(0, 6).map(x => esc(x.field) + ' <b class="num">' + x.n + '</b>').join(' · ');
-  el.innerHTML = '<h2>학원·교습소 <span class="note">· ' + esc(where) + '</span></h2>' +
+  showSec('ac');
+  el.innerHTML = '<p class="note" style="margin:0 0 6px">' + esc(where) + '</p>' +
     '<p style="margin:0">지금 <b class="num">' + fmt(st.open) + '곳</b> <span class="note">(학원 ' + fmt(st.hakwon) + ' · 교습소 ' + fmt(st.gyoseupso) + ') · 최근 1년 새로 등록 ' + fmt(st.new_1y) + '곳' +
       (st.closed ? ' · ' + esc(ym(st.since)) + ' 이후 폐원 ' + fmt(st.closed) + '곳' : '') + '</span></p>' +
     (f ? '<p class="note" style="margin:4px 0 0">' + f + '</p>' : '') +
@@ -964,13 +1102,18 @@ async function showArea(code){
   const best = rows.filter(r => r.svc !== '전체' && r.o3 >= 10).sort((x,y) => y.s3/y.o3 - x.s3/x.o3)[0];
   $('panel').innerHTML = '<div class="label">'+esc(a.gu)+' · '+esc(a.kind)+'</div><h1>'+esc(a.name)+'</h1>' + cmpBtn({k:'a', id:code, t:a.name}) +
     (all.med_days ? '<p class="sub">문 닫은 가게의 영업 기간 중앙값 <b class="num">'+(all.med_days/365).toFixed(1)+'년</b></p>' : '') +
-    survBlock(all, '이 상권 전체') + '<div id="tk"></div>' +
+    survBlock(all, '이 상권 전체') + kpiRow() + '<div id="tk"></div>' +
     (best ? '<p class="note" style="margin-top:10px">이 상권에서 3년을 가장 잘 버틴 업종은 <b>'+esc(best.svc)+'</b>('+pct(best.s3,best.o3)+', '+best.o3+'곳 중)입니다.</p>' : '') +
-    '<div id="tr"><p class="loading">매출·유동인구 흐름 불러오는 중…</p></div>' +
-    '<div id="rn"></div><h2>업종별 생존율</h2>' + svcTable(rows, 10) + '<div id="dt"><p class="loading">조건별 통계 불러오는 중…</p></div><div id="ac"></div>' + FOOT;
-  if(a.lat) map.flyTo([a.lat, a.lon], Math.max(map.getZoom(), 15), {duration:.6});
+    sec('a.tr', '상권 흐름', '<div id="tr"><p class="loading">매출·유동인구 흐름 불러오는 중…</p></div>', true) +
+    sec('a.rn', '임대료·공실률', '<div id="rn"></div>', false, true) +
+    sec('a.sv', '업종별 생존율', svcTable(rows, 10), true) +
+    sec('a.dt', '조건별로 보면', '<div id="dt"><p class="loading">조건별 통계 불러오는 중…</p></div>', false) +
+    sec('a.st', '외국인 민박', '<div id="st"></div>', false, true) +
+    sec('a.ac', '학원·교습소', '<div id="ac"></div>', false, true) + FOOT;
+  if(a.lat) fly(a.lat, a.lon, Math.max(map.getZoom(), 15));
   toPanel();
   fillAcademy(tok, {p_lat:0, p_lon:0, p_r:0, p_area:code}, null, '이 상권'); fillRent(tok, code);
+  if(a.lat) fillStay(tok, a.lat, a.lon, 500); else kpSet(tok, 'stay', '—', '');
   const sv = trendSvc();
   const [d, tr] = await Promise.all([
     rpc('place_detail', {p_lat:0, p_lon:0, p_r:0, p_svc:state.svc, p_area:code}).catch(() => null),
@@ -982,7 +1125,7 @@ async function showArea(code){
   ]);
   if(tok !== panelTok) return;
   $('dt').innerHTML = detailHtml(d, '이 상권');
-  $('tr').innerHTML = trendHtml(tr, sv);
+  $('tr').innerHTML = trendHtml(tr, sv); kpTrend(tok, tr && tr.t);
   $('tk').innerHTML = takeaways({d, tr: tr && tr.t, where:'이 상권'});
 }
 
@@ -1014,24 +1157,28 @@ async function showBuilding(jkey){
     survBlock(b, '이 건물에서 문 연 가게') +
     (b.o1 < 5 ? '<p class="warn">이 건물은 기록이 적어 숫자가 크게 흔들립니다. 아래 주변·상권 수치를 함께 보세요.</p>' : '') +
     '<p class="note" style="margin-top:8px">지금 영업 중 <b>'+b.n_open+'</b>곳 · 최근 3년 사이 폐업 <b>'+recent+'</b>건</p>' +
-    '<div id="tk"><p class="loading">땅값·주변 흐름 분석 중…</p></div><div id="rn"></div>' +
-    '<h2>주변과 비교</h2><div class="tblwrap"><table><thead><tr><th></th><th class="r">1년</th><th class="r">2년</th><th class="r">3년</th><th class="r">3년 표본</th></tr></thead><tbody>' +
-      cmp('이 건물', b) + cmp('반경 300m', nearAll) + (area[0] ? cmp('상권 전체', area[0]) : '') + '</tbody></table></div>' +
-    '<h2>땅·건물</h2><div id="land"><p class="loading">브이월드에서 불러오는 중…</p></div>' +
-    '<div id="dt"><p class="loading">조건별 통계 불러오는 중…</p></div>' +
-    '<h2>이 근처(300m)에서 오래 버틴 업종</h2>' + svcTable(near, 10) + '<div id="ac"></div>' +
-    '<h2>이 건물을 거쳐 간 가게</h2>' +
+    kpiRow() + '<div id="tk"><p class="loading">땅값·주변 흐름 분석 중…</p></div>' +
+    sec('b.cmp', '주변과 비교', '<div class="tblwrap"><table><thead><tr><th></th><th class="r">1년</th><th class="r">2년</th><th class="r">3년</th><th class="r">3년 표본</th></tr></thead><tbody>' +
+      cmp('이 건물', b) + cmp('반경 300m', nearAll) + (area[0] ? cmp('상권 전체', area[0]) : '') + '</tbody></table></div>', true) +
+    sec('b.hist', '이 건물을 거쳐 간 가게 <span class="note">'+fmt(hist.length)+'곳</span>',
     '<p class="note" style="margin:0 0 6px">2016년 이후 개업 <b>'+since.length+'</b> · 폐업 <b>'+turn.closes+'</b>' +
       (turn.lifeMed != null ? ' · 문 닫은 가게 영업 기간 중앙값 <b>'+(turn.lifeMed/365).toFixed(1)+'년</b>' : '') +
       (turn.gapMed != null && b.n_open <= 3 ? ' · 다음 가게까지 중앙값 <b>'+gapTxt(turn.gapMed)+'</b>' : '') +
       '<br>인허가가 필요한 가게만 셉니다(일반 옷가게 등은 없음, 학원은 위에 따로). 같은 건물 안 다른 호실일 수 있습니다.</p>' +
     '<div class="tblwrap"><table><thead><tr><th>상호</th><th class="col-bar">업종</th><th>개업</th><th>폐업</th><th class="r">영업</th></tr></thead><tbody>' +
       hist.map(x => '<tr><td>'+esc(x.name)+'<br><span class="note">'+esc(x.floor||'')+(x.size_m2 ? ' · '+Math.round(x.size_m2/3.3058)+'평' : '')+'<span class="m-only"> · '+esc(x.svc || x.biz_type || '')+'</span></span></td><td class="note col-bar">'+esc(x.svc || x.biz_type || '')+'</td><td class="num">'+ym(x.open_date)+'</td><td class="num">'+(ym(x.close_date) || '—')+'</td><td class="r">'+lifeTag(x)+'</td></tr>').join('') +
-    '</tbody></table></div>' + FOOT;
+    '</tbody></table></div>', true) +
+    sec('b.land', '땅·건물', '<div id="land"><p class="loading">브이월드에서 불러오는 중…</p></div>', false) +
+    sec('b.rn', '임대료·공실률', '<div id="rn"></div>', false, true) +
+    sec('b.dt', '조건별로 보면', '<div id="dt"><p class="loading">조건별 통계 불러오는 중…</p></div>', false) +
+    sec('b.sv', '이 근처(300m)에서 오래 버틴 업종', svcTable(near, 10), false) +
+    sec('b.st', '외국인 민박', '<div id="st"></div>', false, true) +
+    sec('b.ac', '학원·교습소', '<div id="ac"></div>', false, true) + FOOT;
   setMarker(b.lat, b.lon);
-  map.flyTo([b.lat, b.lon], Math.max(map.getZoom(), 17), {duration:.6});
+  fly(b.lat, b.lon, Math.max(map.getZoom(), 17));
   toPanel();
-  fillAcademy(tok, {p_lat:b.lat, p_lon:b.lon, p_r:300}, jkey, '반경 300m'); if(b.area_code) fillRent(tok, b.area_code);
+  fillAcademy(tok, {p_lat:b.lat, p_lon:b.lon, p_r:300}, jkey, '반경 300m'); fillRent(tok, b.area_code);
+  fillTrendKp(tok, b.area_code); fillStay(tok, b.lat, b.lon, 300);
   const [L, d] = await Promise.all([landP, detP]);
   if(tok !== panelTok) return;
   $('land').innerHTML = landHtml(L);
@@ -1051,12 +1198,17 @@ async function showPoint(lat, lon, title, addr){
   if(tok !== panelTok) return;
   const all = near.find(r => r.svc === '전체') || {};
   $('panel').innerHTML = '<div class="label">고른 위치 반경 300m</div><h1>'+esc(title || '이 근처 가게들')+'</h1>' + cmpBtn({k:'p', id:lat.toFixed(5)+','+lon.toFixed(5), t:title || '고른 위치', addr}) + survBlock(all, '') +
-    '<div id="tk"><p class="loading">땅값·주변 흐름 분석 중…</p></div>' +
-    '<h2>땅·건물</h2><div id="land"><p class="loading">브이월드에서 불러오는 중…</p></div>' +
-    '<div id="dt"><p class="loading">조건별 통계 불러오는 중…</p></div>' +
-    '<h2>업종별 생존율</h2>' + svcTable(near, 10) + '<p class="note">점(건물)을 누르면 그 건물의 이력을 볼 수 있습니다.</p><div id="ac"></div>' + FOOT;
+    kpiRow() + '<div id="tk"><p class="loading">땅값·주변 흐름 분석 중…</p></div>' +
+    sec('p.sv', '업종별 생존율', svcTable(near, 10) + '<p class="note">점(건물)을 누르면 그 건물의 이력을 볼 수 있습니다.</p>', true) +
+    sec('p.land', '땅·건물', '<div id="land"><p class="loading">브이월드에서 불러오는 중…</p></div>', false) +
+    sec('p.rn', '임대료·공실률', '<div id="rn"></div>', false, true) +
+    sec('p.dt', '조건별로 보면', '<div id="dt"><p class="loading">조건별 통계 불러오는 중…</p></div>', false) +
+    sec('p.st', '외국인 민박', '<div id="st"></div>', false, true) +
+    sec('p.ac', '학원·교습소', '<div id="ac"></div>', false, true) + FOOT;
   toPanel();
-  fillAcademy(tok, {p_lat:lat, p_lon:lon, p_r:300}, null, '반경 300m');
+  const pa = areaAt(lat, lon);
+  fillAcademy(tok, {p_lat:lat, p_lon:lon, p_r:300}, null, '반경 300m'); fillRent(tok, pa && pa.code);
+  fillTrendKp(tok, pa && pa.code); fillStay(tok, lat, lon, 300);
   const [L, d] = await Promise.all([landP, detP]);
   if(tok !== panelTok) return;
   $('land').innerHTML = landHtml(L);
@@ -1109,12 +1261,17 @@ async function doSearch(q, pickFirst){
 }
 async function pick(h){
   $('results').hidden = true; $('q').blur();
+  if(state.mode === 'stay'){
+    let ll = h.kind === 'area' ? AREAS.find(a => a.code === h.id) : h.kind === 'building' ? (await rest('building?select=lat,lon&jkey=eq.' + encodeURIComponent(h.id)).catch(() => []))[0] : h;
+    await loadDongs(); const d = ll && ll.lat ? dongAt(ll.lat, ll.lon) : null;
+    if(d) return showDong(d.cd);
+  }
   if(h.kind === 'area') return showArea(h.id);
   if(h.kind === 'building') return showBuilding(h.id);
   // 주소·장소: 그 지번에 가게 기록이 있으면 건물 화면, 없으면 위치 화면
   const jk = toJkey(h.addr);
   if(jk){ const [b] = await rest('building?select=jkey&jkey=eq.' + encodeURIComponent(jk)).catch(() => []); if(b) return showBuilding(b.jkey); }
-  map.flyTo([h.lat, h.lon], Math.max(map.getZoom(), 17), {duration:.6});
+  fly(h.lat, h.lon, Math.max(map.getZoom(), 17));
   showPoint(h.lat, h.lon, h.label, h.addr);
 }
 $('q').addEventListener('input', e => { clearTimeout(sTimer); sTimer = setTimeout(() => doSearch(e.target.value).catch(()=>{}), 300); });
@@ -1122,26 +1279,235 @@ $('q').addEventListener('keydown', e => { if(e.key === 'Enter'){ e.preventDefaul
 $('results').addEventListener('click', e => { const b = e.target.closest('[data-i]'); if(b) pick(lastHits[+b.dataset.i]); });
 document.addEventListener('click', e => { if(!e.target.closest('.searchbox')) $('results').hidden = true; });
 
+// ---------- 민박(외국인관광 도시민박업·한옥체험업): 행정동별 수요(단기체류 외국인)·공급(민박·호텔 객실)·생존
+let DONGS = null, STAY_META = {}, SEOUL_STAY = null;
+const dongLayer = L.layerGroup().addTo(map), stayLayer = L.layerGroup().addTo(map), hlLayer = L.layerGroup().addTo(map);
+const SM = {
+  opp:    {lab:'숙박 객실당 밤 외국인', btn:'수요 대비 숙박'},
+  demand: {lab:'밤에 머무는 외국인', btn:'외국인 수요'},
+  supply: {lab:'영업 중 민박', btn:'민박 수'},
+  surv:   {lab:'민박 3년 생존율', btn:'3년 생존'},
+};
+state.sm = 'opp';
+async function loadDongs(){
+  if(DONGS) return;
+  const [rows, meta] = await Promise.all([rest('dong?select=*', true), rest('meta?select=value&key=eq.stay')]);
+  DONGS = rows; STAY_META = (meta[0] && meta[0].value) || {};
+  const sup = DONGS.filter(d => d.n_open > 0).map(d => d.n_open).sort((a, b) => a - b);
+  DONGS.forEach(d => { d.sup_pct = d.n_open > 0 ? sup.filter(v => v < d.n_open).length / Math.max(sup.length - 1, 1) : null; });
+  const sum = k => DONGS.reduce((s, d) => s + (d[k] || 0), 0);
+  SEOUL_STAY = {o3: sum('o3'), s3: sum('s3'), o1: sum('o1'), s1: sum('s1'), new1: sum('new1'), new0: sum('new0'), close1: sum('close1'), n_open: sum('n_open'), rooms: sum('rooms'), night: sum('night'), hotel: sum('hotel')};
+}
+const dongAt = (lat, lon) => DONGS && DONGS.find(d => d.geom && d.geom.some(r => inRing(lon, lat, r)));
+const sRate = d => d.o3 >= 15 ? d.s3 / d.o3 : null;
+function dcolor(d){
+  const q = v => v == null ? css('--cna') : css(v < .2 ? '--t1' : v < .4 ? '--t2' : v < .6 ? '--t3' : v < .8 ? '--t4' : '--t5');
+  if(state.sm === 'opp') return q(d.pct);
+  if(state.sm === 'demand') return q(d.night_pct);
+  if(state.sm === 'supply') return q(d.sup_pct);
+  const r = sRate(d); if(r == null) return css('--cna');
+  const b = BINS[3]; return css(r < b[0] ? '--c1' : r < b[1] ? '--c2' : r < b[2] ? '--c3' : r < b[3] ? '--c4' : '--c5');
+}
+const pplN = v => v == null ? '—' : fmt(Math.round(v)) + '명';
+function dongTip(d){
+  const v = state.sm === 'opp' ? (d.per_room != null ? '객실당 ' + d.per_room.toFixed(1) + '명' : '밤 외국인 적음')
+    : state.sm === 'demand' ? '밤 외국인 ' + pplN(d.night) : state.sm === 'supply' ? '민박 ' + d.n_open + '곳'
+    : (sRate(d) != null ? '3년 생존 ' + Math.round(sRate(d) * 100) + '%' : '3년 표본 부족');
+  return esc(d.name) + ' · ' + v;
+}
+function drawDongs(){
+  dongLayer.clearLayers();
+  const fo = map.getZoom() >= 15 ? .1 : .42;
+  for(const d of DONGS || []){
+    if(!d.geom) continue;
+    const c = dcolor(d);
+    const poly = L.polygon(d.geom.map(r => r.map(([x, y]) => [y, x])), {color: c, weight: 1, fillColor: c, fillOpacity: fo});
+    poly.on('click', e => { L.DomEvent.stopPropagation(e); showDong(d.cd); });
+    poly.bindTooltip(dongTip(d), {sticky: true});
+    poly.addTo(dongLayer);
+  }
+}
+let stayTok = 0;
+async function drawStays(){
+  stayLayer.clearLayers(); const tok = ++stayTok;
+  if(state.mode !== 'stay' || map.getZoom() < 15) return;
+  const b = map.getBounds();
+  const rows = await rest('stay?select=name,kind,lat,lon,rooms,open_date,close_date,dong_cd&lat=gte.' + b.getSouth() + '&lat=lte.' + b.getNorth() + '&lon=gte.' + b.getWest() + '&lon=lte.' + b.getEast() + '&limit=4000').catch(() => []);
+  if(tok !== stayTok) return;
+  const cut = new Date(Date.now() - 3 * 365 * 864e5).toISOString().slice(0, 10);
+  for(const s of rows){
+    if(s.lat == null || (s.close_date && s.close_date < cut)) continue;
+    const live = !s.close_date;
+    const m = L.circleMarker([s.lat, s.lon], live
+      ? {radius: 4 + Math.min(6, (s.rooms || 1) * 1.2), color: '#fff', weight: 1, fillColor: css(s.kind === '한옥체험' ? '--mid' : '--accent'), fillOpacity: .9}
+      : {radius: 3.5, color: '#fff', weight: 1, fillColor: css('--risk'), fillOpacity: .55});
+    m.bindTooltip(esc(s.name || '(상호 없음)') + ' · ' + esc(s.kind) + (s.rooms ? ' · 객실 ' + s.rooms : '') + '<br>' + ym(s.open_date) + ' 등록' + (s.close_date ? ' · ' + ym(s.close_date) + ' 폐업' : ''));
+    if(s.dong_cd) m.on('click', e => { L.DomEvent.stopPropagation(e); showDong(s.dong_cd); });
+    m.addTo(stayLayer);
+  }
+}
+function stayLegend(){
+  const b = BINS[3], p = x => Math.round(x * 100);
+  const rows = state.sm === 'surv'
+    ? [['--c5', '≥' + p(b[3]) + '%'], ['--c4', p(b[2]) + '~' + p(b[3]) + '%'], ['--c3', p(b[1]) + '~' + p(b[2]) + '%'], ['--c2', p(b[0]) + '~' + p(b[1]) + '%'], ['--c1', '<' + p(b[0]) + '%'], ['--cna', '3년 지난 민박 15곳 미만']]
+    : [['--t5', state.sm === 'opp' ? '숙박 적음 (상위 20%)' : '많음 (상위 20%)'], ['--t4', ''], ['--t3', '중간'], ['--t2', ''], ['--t1', state.sm === 'opp' ? '숙박 많음 (하위 20%)' : '적음 (하위 20%)'], ['--cna', state.sm === 'supply' ? '민박 없음' : '밤 외국인 100명 미만']];
+  $('legend').innerHTML = '<b>' + esc(SM[state.sm].lab) + '</b> · 행정동<div class="rows">' + rows.map(([c, t]) => '<i style="background:' + css(c) + '"></i>' + t).join('<br>') +
+    '<div class="dotkey"><b>점</b> <span class="muted">(크게 확대하면)</span><br><i class="dot" style="width:10px;height:10px;background:' + css('--accent') + '"></i>도시민박 <i class="dot" style="width:10px;height:10px;background:' + css('--mid') + '"></i>한옥체험<br><i class="dot" style="width:7px;height:7px;background:' + css('--risk') + ';opacity:.6"></i>최근 3년 안에 폐업 · 클수록 객실 많음</div></div>';
+}
+const spopTxt = () => STAY_META.spop_from ? STAY_META.spop_from.slice(0, 4) + '.' + STAY_META.spop_from.slice(4, 6) + '.' + STAY_META.spop_from.slice(6) + '~' + STAY_META.spop_to.slice(4, 6) + '.' + STAY_META.spop_to.slice(6) : '';
+const STAY_FOOT = () => '<footer class="foot"><p><b>민박</b> 행정안전부 LOCALDATA의 외국인관광 도시민박업·한옥체험업 등록. 등록하지 않고 운영하는 숙소는 빠집니다. 생존율은 2016년 이후 등록한 민박 중 1·3년이 지난 곳이 그 시점에 아직 영업 중이었던 비율입니다.</p>' +
+  '<p><b>외국인 수요</b> 서울시 단기체류 외국인 생활인구(통신 자료로 추정, 행정동·시간대) ' + esc(spopTxt()) + ' ' + (STAY_META.spop_days || '') + '일 평균. 밤은 01~05시, 낮은 11~18시입니다. 계절에 따라 달라지고, 출장·방문 목적 체류자도 섞여 있습니다.</p>' +
+  '<p><b>숙박 객실당 밤 외국인</b> 밤 외국인 ÷ (민박 객실 + 호텔·모텔 등 숙박업 객실 + 10). 높을수록 그 동에서 자는 외국인에 비해 등록된 숙소가 적다는 뜻입니다. 밤 외국인이 100명 미만인 동은 순위에서 뺐습니다. 행정동 경계: 통계청·행정안전부(vuski/admdongkor 가공본).</p></footer>';
+function smSeg(){
+  return '<div class="panel-ctl seg" role="group" aria-label="지도 색">' + Object.entries(SM).map(([k, v]) => '<button type="button" data-sm="' + k + '" aria-pressed="' + (k === state.sm) + '">' + v.btn + '</button>').join('') + '</div>';
+}
+function bindSm(){ $('panel').querySelectorAll('[data-sm]').forEach(b => b.onclick = () => { state.sm = b.dataset.sm; $('panel').querySelectorAll('[data-sm]').forEach(x => x.setAttribute('aria-pressed', String(x === b))); drawDongs(); stayLegend(); }); }
+const dRow = (d, cols) => '<tr class="go" data-cd="' + esc(d.cd) + '"><td>' + esc(d.name) + '<br><span class="note">' + esc(d.gu) + '</span></td>' + cols.map(c => '<td class="r num">' + c + '</td>').join('') + '</tr>';
+const dTable = (head, rows) => '<div class="tblwrap"><table><thead><tr><th>행정동</th>' + head.map(h => '<th class="r">' + h + '</th>').join('') + '</tr></thead><tbody>' + rows.join('') + '</tbody></table></div>';
+async function showStayHome(){
+  state.sel = null; const tok = ++panelTok; setLink(null); hlLayer.clearLayers();
+  $('panel').innerHTML = '<p class="loading">불러오는 중…</p>';
+  await loadDongs(); if(tok !== panelTok) return;
+  const S = SEOUL_STAY;
+  const opp = DONGS.filter(d => d.per_room != null && d.night >= 300).sort((a, b) => b.per_room - a.per_room).slice(0, 15);
+  const many = [...DONGS].sort((a, b) => b.n_open - a.n_open).slice(0, 15);
+  const grow = DONGS.filter(d => d.new1 >= 10).sort((a, b) => (b.new1 - b.new0) - (a.new1 - a.new0)).slice(0, 10);
+  $('panel').innerHTML = '<h1>외국인 민박, 어디에 얼마나</h1><p class="sub">외국인관광 도시민박업·한옥체험업 등록 기준 · 행정동을 누르거나 주소를 검색해 보세요</p>' +
+    '<div class="kpis"><div><small>영업 중 민박</small><b>' + fmt(S.n_open) + '곳</b><small>객실 ' + fmt(S.rooms) + '개</small></div>' +
+    '<div><small>최근 1년 새로 등록</small><b>' + fmt(S.new1) + '곳</b><small>그 전 1년 ' + fmt(S.new0) + '곳 · 폐업 ' + fmt(S.close1) + '곳</small></div>' +
+    '<div><small>3년 생존율</small><b>' + pct(S.s3, S.o3) + '</b><small>1년 ' + pct(S.s1, S.o1) + ' · 3년 지난 ' + fmt(S.o3) + '곳</small></div>' +
+    '<div><small>밤에 머무는 외국인</small><b>' + fmt(Math.round(S.night / 1e3) * 1e3) + '명</b><small>' + esc(spopTxt()) + ' 평균</small></div></div>' +
+    '<h2>지도 색</h2>' + smSeg() +
+    sec('s.opp', '외국인 수요에 비해 숙박이 적은 동', '<p class="note" style="margin:0 0 6px">밤 외국인 300명 이상인 동 중 숙박 객실(민박+호텔 등) 1개당 밤 외국인이 많은 순</p>' +
+      dTable(['밤 외국인', '민박 객실', '호텔 등 객실', '객실당'], opp.map(d => dRow(d, [fmt(Math.round(d.night)), fmt(d.rooms), fmt(d.hotel), d.per_room.toFixed(1)]))), true) +
+    sec('s.many', '민박이 많은 동', dTable(['영업', '1년 신규', '3년 생존'], many.map(d => dRow(d, [fmt(d.n_open), fmt(d.new1), d.o3 >= 15 ? pct(d.s3, d.o3) : '—']))), true) +
+    sec('s.grow', '빠르게 늘어난 동', '<p class="note" style="margin:0 0 6px">최근 1년 새로 등록한 수 − 그 전 1년</p>' +
+      dTable(['1년 신규', '그 전 1년', '영업'], grow.map(d => dRow(d, [fmt(d.new1), fmt(d.new0), fmt(d.n_open)]))), false) + STAY_FOOT();
+  bindSm();
+  $('panel').querySelectorAll('tr[data-cd]').forEach(r => r.onclick = () => showDong(r.dataset.cd));
+  toPanel();
+}
+// 연도별 등록·폐업 막대(민박 기록에서 직접 셈)
+function stayYears(list){
+  const cy = new Date().getFullYear(), y0 = Math.max(2012, Math.min(...list.map(s => +s.open_date.slice(0, 4))));
+  const ys = []; for(let y = y0; y <= cy; y++) ys.push({y, opens: 0, closes: 0});
+  for(const s of list){
+    const o = ys.find(x => x.y === +s.open_date.slice(0, 4)); if(o) o.opens++;
+    if(s.close_date){ const c = ys.find(x => x.y === +s.close_date.slice(0, 4)); if(c) c.closes++; }
+  }
+  return ys;
+}
+function barsSvg(ys, labO, labC){
+  const W = 360, H = 110, cy = new Date().getFullYear(), max = Math.max(1, ...ys.map(y => Math.max(y.opens, y.closes))), bw = (W - 8) / ys.length;
+  const bars = ys.map((y, i) => { const x = 4 + i * bw, ho = (H - 26) * y.opens / max, hc = (H - 26) * y.closes / max, part = y.y === cy;
+    return '<rect x="' + (x + 1).toFixed(1) + '" y="' + (H - 14 - ho).toFixed(1) + '" width="' + (bw / 2 - 1.5).toFixed(1) + '" height="' + ho.toFixed(1) + '" fill="' + css('--accent') + '" opacity="' + (part ? .45 : 1) + '"/>' +
+      '<rect x="' + (x + bw / 2).toFixed(1) + '" y="' + (H - 14 - hc).toFixed(1) + '" width="' + (bw / 2 - 1.5).toFixed(1) + '" height="' + hc.toFixed(1) + '" fill="' + css('--risk') + '" opacity="' + (part ? .45 : 1) + '"/>' +
+      (i % 2 === 0 || i === ys.length - 1 ? '<text x="' + (x + bw / 2).toFixed(1) + '" y="' + (H - 2) + '" font-size="10" text-anchor="middle" fill="' + css('--muted') + '">' + String(y.y).slice(2) + '</text>' : ''); }).join('');
+  const hit = hitCols(ys.map((y, i) => 4 + i * bw + bw / 2), W, H, ys.map(y => y.y + '년' + (y.y === cy ? ' (진행 중)' : '') + '\n' + labO + ' ' + y.opens + '곳 · ' + labC + ' ' + y.closes + '곳'));
+  return '<p class="legend-inline" style="margin:0"><i style="background:' + css('--accent') + ';margin-left:0"></i>' + labO + '<i style="background:' + css('--risk') + '"></i>' + labC + ' · 흐린 막대는 올해(진행 중)</p><svg class="spark" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="연도별 ' + labO + '·' + labC + '">' + bars + hit + '</svg>';
+}
+const BLD_C = {'다가구': '--accent', '단독': '--c5', '다세대': '--mid', '아파트': '--t4', '연립': '--c2', '기타': '--cna'};
+function stayTakeaways(d, list){
+  const out = [], S = SEOUL_STAY, P = x => Math.round(x * 100) + '%';
+  const rank = (k, v) => DONGS.filter(x => (x[k] || 0) > v).length + 1;
+  if(d.n_open) out.push('영업 중인 민박 <b>' + fmt(d.n_open) + '곳</b>으로 서울 행정동 ' + DONGS.length + '곳 중 <b>' + rank('n_open', d.n_open) + '위</b>입니다.');
+  if(d.new1 + d.new0 >= 6){
+    const r = d.new0 ? d.new1 / d.new0 : null;
+    out.push('최근 1년 새로 등록 <b>' + fmt(d.new1) + '곳</b>, 그 전 1년 ' + fmt(d.new0) + '곳' + (r == null ? '' : r >= 1.3 ? ' — <b class="bad">' + r.toFixed(1) + '배로 늘어</b> 경쟁이 빠르게 커지고 있습니다' : r <= .77 ? ' — 새 등록이 <b class="good">줄었습니다</b>' : ' — 비슷한 속도입니다') + '.');
+  }
+  const r3 = sRate(d), rs = S.o3 ? S.s3 / S.o3 : null;
+  if(r3 != null && rs != null) out.push('3년이 지난 민박 ' + fmt(d.o3) + '곳 중 <b>' + P(r3) + '</b>가 아직 영업 중으로, 서울 평균(' + P(rs) + ')보다 ' + (Math.abs(r3 - rs) < .05 ? '비슷합니다' : r3 > rs ? '<b class="good">오래 버팁니다</b>' : '<b class="bad">빨리 그만둡니다</b>') + '.');
+  if(d.night != null && d.day != null && d.night >= 100){
+    if(d.night > d.day * 1.2) out.push('밤에 머무는 외국인(' + pplN(d.night) + ')이 낮(' + pplN(d.day) + ')보다 많아, <b>묵으러 오는</b> 동입니다.');
+    else if(d.day > d.night * 1.8) out.push('낮에 찾는 외국인(' + pplN(d.day) + ')이 밤(' + pplN(d.night) + ')보다 훨씬 많아, 들렀다 <b>다른 동에서 자는</b> 경우가 많습니다.');
+  }
+  if(d.hotel > Math.max(d.rooms, 1) * 3 && d.hotel >= 50) out.push('호텔·모텔 등 숙박업 객실이 <b>' + fmt(d.hotel) + '개</b>로 민박 객실(' + fmt(d.rooms) + '개)보다 훨씬 많습니다. 손님을 두고 호텔과 겨루는 동입니다.');
+  if(d.pct != null) out.push('숙박 객실 1개당 밤 외국인 <b>' + d.per_room.toFixed(1) + '명</b>으로 서울 행정동 중 ' + (d.pct >= .7 ? '상위 <b>' + Math.max(1, Math.round((1 - d.pct) * 100)) + '%</b>, 수요에 비해 숙소가 <b class="good">적은 편</b>' : d.pct <= .3 ? '하위 <b>' + Math.max(1, Math.round(d.pct * 100)) + '%</b>, 수요에 비해 숙소가 <b class="bad">많은 편</b>' : '중간(상위 ' + Math.round((1 - d.pct) * 100) + '%)') + '입니다.');
+  const life = list.filter(s => s.close_date && s.life_days != null).map(s => s.life_days);
+  if(life.length >= 8) out.push('문 닫은 민박 ' + life.length + '곳의 영업 기간 중앙값은 <b>' + (median(life) / 365).toFixed(1) + '년</b>입니다.');
+  return out.length ? '<ul class="takeaways"><li class="h">한눈에 보기</li>' + out.map(x => '<li>' + x + '</li>').join('') + '</ul>' : '';
+}
+async function showDong(cd){
+  await loadDongs();
+  const d = DONGS.find(x => x.cd === cd); if(!d) return;
+  if(state.mode !== 'stay') await setMode('stay', true);
+  state.sel = {kind: 'dong', cd}; const tok = ++panelTok; leaveCmp(); cmpBar(); setLink('d', cd); track('dong');
+  hlLayer.clearLayers();
+  if(d.geom) L.polygon(d.geom.map(r => r.map(([x, y]) => [y, x])), {color: css('--ink'), weight: 2.5, fill: false, interactive: false}).addTo(hlLayer);
+  $('panel').innerHTML = '<p class="loading">불러오는 중…</p>';
+  fly(d.lat, d.lon, Math.max(map.getZoom(), 15)); toPanel();
+  const list = await rest('stay?select=name,kind,open_date,close_date,rooms,guests,bld,life_days,road&dong_cd=eq.' + cd + '&order=open_date.desc', true).catch(() => []);
+  if(tok !== panelTok) return;
+  const live = list.filter(s => !s.close_date), r3 = sRate(d);
+  const bm = Object.entries(d.bmix || {}), bt = bm.reduce((s, [, n]) => s + n, 0);
+  const rb = [['1실', s => (s.rooms || 1) === 1], ['2실', s => s.rooms === 2], ['3실 이상', s => s.rooms >= 3]].map(([l, f]) => [l, live.filter(f).length]);
+  const inAreas = AREAS.filter(a => a.lat && d.geom && d.geom.some(r => inRing(a.lon, a.lat, r)));
+  const recentClosed = list.filter(s => s.close_date && s.close_date >= new Date(Date.now() - 3 * 365 * 864e5).toISOString().slice(0, 10));
+  const stTable = (rows, closed) => '<div class="tblwrap"><table><thead><tr><th>민박</th><th class="r">객실</th><th>' + (closed ? '폐업' : '등록') + '</th><th class="r">' + (closed ? '영업' : '건물') + '</th></tr></thead><tbody>' +
+    rows.map(s => '<tr><td>' + esc(s.name || '(상호 없음)') + (s.kind === '한옥체험' ? ' <span class="flagchip">한옥</span>' : '') + '<br><span class="note">' + esc(s.road || '') + '</span></td><td class="r num">' + (s.rooms || '—') + '</td><td class="num">' + ym(closed ? s.close_date : s.open_date) + '</td><td class="r">' +
+      (closed ? lifeTag(s) : '<span class="note">' + esc(s.bld || '') + '</span>') + '</td></tr>').join('') + '</tbody></table></div>';
+  $('panel').innerHTML = '<div class="label">' + esc(d.gu) + ' · 행정동</div><h1>' + esc(d.name) + ' 외국인 민박</h1>' +
+    '<div class="kpis"><div><small>영업 중 민박</small><b>' + fmt(d.n_open) + '곳</b><small>객실 ' + fmt(d.rooms) + '개' + (d.hanok ? ' · 한옥 ' + d.hanok + '곳' : '') + '</small></div>' +
+    '<div><small>밤에 머무는 외국인</small><b>' + pplN(d.night) + '</b><small>' + (d.night_pct != null ? '서울 상위 ' + Math.max(1, Math.round((1 - d.night_pct) * 100)) + '% · 낮 ' + pplN(d.day) : '자료 없음') + '</small></div>' +
+    '<div><small>숙박 객실당 밤 외국인</small><b>' + (d.per_room != null ? d.per_room.toFixed(1) + '명' : '—') + '</b><small>' + (d.pct != null ? '서울 상위 ' + Math.max(1, Math.round((1 - d.pct) * 100)) + '%' : '밤 외국인 100명 미만') + ' · 호텔 등 ' + fmt(d.hotel) + '실</small></div>' +
+    '<div><small>3년 생존율</small><b>' + (r3 != null ? Math.round(r3 * 100) + '%' : '—') + '</b><small>' + (r3 != null ? fmt(d.s3) + ' / ' + fmt(d.o3) + '곳' : '3년 지난 민박 ' + fmt(d.o3) + '곳(15곳 필요)') + '</small></div></div>' +
+    stayTakeaways(d, list) +
+    sec('d.yr', '해마다 새로 등록 · 폐업', list.length ? barsSvg(stayYears(list), '등록', '폐업') : '<p class="note">등록 기록이 없습니다.</p>', true) +
+    (live.length ? sec('d.bld', '어떤 집에서, 몇 실로', (bt ? '<div class="mixbar">' + bm.map(([k, n]) => '<i style="width:' + (100 * n / bt).toFixed(1) + '%;background:' + css(BLD_C[k] || '--cna') + '" title="' + esc(k) + ' ' + n + '곳"></i>').join('') + '</div>' +
+      '<p class="note" style="margin:0">' + bm.map(([k, n]) => '<i style="display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:4px;background:' + css(BLD_C[k] || '--cna') + '"></i>' + esc(k) + ' <b class="num">' + n + '</b>').join(' · ') + '</p>' : '') +
+      '<p class="note" style="margin:8px 0 0">객실 수 · ' + rb.map(([l, n]) => l + ' <b class="num">' + n + '</b>').join(' · ') + '</p>', true) : '') +
+    sec('d.area', '이 동의 상권 <span class="note">가게 생존율·흐름</span>', inAreas.length ? '<div id="dar"><p class="loading">불러오는 중…</p></div>' : '<p class="note">이 동 안에 서울시 상권이 없습니다.</p>', true) +
+    (live.length ? sec('d.list', '영업 중인 민박 <span class="note">' + fmt(live.length) + '곳</span>', stTable(live.slice(0, 150), false) + (live.length > 150 ? '<p class="note">최근 등록한 150곳만 보입니다.</p>' : ''), false) : '') +
+    (recentClosed.length ? sec('d.cl', '최근 3년 안에 닫은 민박 <span class="note">' + fmt(recentClosed.length) + '곳</span>', stTable(recentClosed.slice(0, 100), true), false) : '') +
+    STAY_FOOT();
+  if(!inAreas.length) return;
+  const codes = inAreas.map(a => a.code).join(',');
+  const [st, tr] = await Promise.all([
+    rest('area_stats?select=code,o3,s3&svc=eq.' + encodeURIComponent('전체') + '&code=in.(' + codes + ')').catch(() => []),
+    rest('area_trend?select=code,grade,score,sales_yoy&svc=eq.' + encodeURIComponent('전체') + '&code=in.(' + codes + ')').catch(() => [])
+  ]);
+  if(tok !== panelTok || !$('dar')) return;
+  const S = new Map(st.map(x => [x.code, x])), T = new Map(tr.map(x => [x.code, x]));
+  $('dar').innerHTML = '<div class="tblwrap"><table><thead><tr><th>상권</th><th class="r">가게 3년 생존</th><th class="r">흐름(외식)</th></tr></thead><tbody>' +
+    inAreas.sort((a, b) => ((S.get(b.code) || {}).o3 || 0) - ((S.get(a.code) || {}).o3 || 0)).map(a => { const s = S.get(a.code) || {}, t = T.get(a.code);
+      return '<tr class="go" data-area="' + esc(a.code) + '"><td>' + esc(a.name) + '<br><span class="note">' + esc(a.kind) + '</span></td><td class="r num">' + (s.o3 >= MIN_AREA ? pct(s.s3, s.o3) : '—') + '</td><td class="r">' + (t && t.grade ? '<span class="grade" style="background:' + css(GRADE_C[t.grade]) + '">' + esc(t.grade) + '</span>' : '—') + '</td></tr>'; }).join('') +
+    '</tbody></table></div>';
+  $('dar').querySelectorAll('[data-area]').forEach(r => r.onclick = async () => { await setMode('surv', true); showArea(r.dataset.area); });
+}
+async function goStay(cd){ showDong(cd); }
+
 // ---------- 컨트롤
 function reshow(){
   const s = state.sel; if(!s) return;
   if(s.kind === 'cmp') return showCompare();
-  if(s.kind === 'area') showArea(s.code); else if(s.kind === 'building') showBuilding(s.jkey); else if(s.kind === 'point') showPoint(s.lat, s.lon, s.title, s.addr);
+  if(s.kind === 'area') showArea(s.code); else if(s.kind === 'building') showBuilding(s.jkey); else if(s.kind === 'point') showPoint(s.lat, s.lon, s.title, s.addr); else if(s.kind === 'dong') showDong(s.cd);
 }
 $('svc').addEventListener('change', async e => {
   track('svc');
   state.svc = e.target.value; await (state.mode === 'trend' ? loadTrend() : loadStats()); drawAreas(); drawLegend();
-  if(state.sel) reshow(); else if(state.mode === 'trend') showTrendHome();
+  if(state.svc !== '전체') try{ const r = JSON.parse(localStorage.getItem('jari.svcs') || '[]').filter(v => v !== state.svc); localStorage.setItem('jari.svcs', JSON.stringify([state.svc, ...r].slice(0, 4))); }catch(err){}
+  if(state.sel) reshow(); else showHome();
 });
-document.querySelectorAll('#mode button').forEach(b => b.addEventListener('click', async () => {
-  if(b.dataset.m === 'trend') track('trend');
-  state.mode = b.dataset.m;
-  document.querySelectorAll('#mode button').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
-  $('yrs').style.display = state.mode === 'trend' ? 'none' : '';
-  if(state.mode === 'trend') await loadTrend(); else await loadStats();
-  drawAreas(); drawLegend();
-  if(state.sel && state.sel.kind === 'cmp') showCompare(); else if(!state.sel || state.sel.kind !== 'area') showHome();
-}));
+// 보기 전환. quiet = 패널은 부른 쪽이 그림
+async function setMode(m, quiet){
+  if(m === 'trend') track('trend'); if(m === 'stay') track('stay');
+  const was = state.mode; state.mode = m;
+  document.querySelectorAll('#mode button').forEach(x => x.setAttribute('aria-pressed', String(x.dataset.m === m)));
+  $('yrs').style.display = m === 'surv' ? '' : 'none';
+  $('svc').style.display = m === 'stay' ? 'none' : '';
+  if(m === 'stay') await loadDongs(); else if(m === 'trend') await loadTrend(); else await loadStats();
+  drawAreas(); drawLegend(); drawBuildings();
+  if(quiet) return;
+  if(state.sel && state.sel.kind === 'cmp' && m !== 'stay') showCompare();
+  else if(state.sel && state.sel.kind === 'area' && m !== 'stay' && was !== 'stay') return;
+  else if(m === 'stay' && state.sel && (state.sel.kind === 'area' || state.sel.kind === 'building' || state.sel.kind === 'point')){
+    const s = state.sel, ll = s.kind === 'area' ? AREAS.find(a => a.code === s.code) : s.kind === 'point' ? s : (await rest('building?select=lat,lon&jkey=eq.' + encodeURIComponent(s.jkey)).catch(() => []))[0];
+    const d = ll && ll.lat ? dongAt(ll.lat, ll.lon) : null;
+    if(d) showDong(d.cd); else showHome();
+  }
+  else showHome();
+}
+document.querySelectorAll('#mode button').forEach(b => b.addEventListener('click', () => setMode(b.dataset.m)));
 document.querySelectorAll('#yrs button').forEach(b => b.addEventListener('click', () => {
   state.y = +b.dataset.y;
   document.querySelectorAll('#yrs button').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
@@ -1160,6 +1526,7 @@ document.querySelectorAll('#yrs button').forEach(b => b.addEventListener('click'
     if(fromLink && CMP.length >= 2) await showCompare();
     else if(link && link.k === 'a' && AREAS.some(x => x.code === link.id)){ await showHome(); await showArea(link.id); }
     else if(link && link.k === 'b'){ await showHome(); await showBuilding(link.id); }
+    else if(link && link.k === 'd'){ await setMode('stay', true); await showDong(link.id); }
     else await showHome();
   } catch(err){
     $('panel').innerHTML = '<p>데이터를 불러오지 못했습니다('+esc(err.message)+'). 잠시 뒤 새로고침해 주세요.</p>';

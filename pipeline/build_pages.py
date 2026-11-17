@@ -1,9 +1,9 @@
-"""검색 노출용 정적 페이지: docs/a/<상권코드>.html, docs/g/<구코드>.html, docs/list.html, docs/sitemap.xml
+"""검색 노출용 정적 페이지: docs/a/<상권코드>.html, docs/g/<구코드>.html, docs/d/<행정동코드>.html, docs/list.html, docs/stay.html, docs/sitemap.xml
 
 입력은 build_pages.sh가 DB에서 내보낸 data/tmp/p_*.csv. 문장은 모두 그 주 숫자로 만든다(고정 안내문 없음).
 사용: bash pipeline/build_pages.sh
 """
-import csv, os, sys, html, collections, datetime as dt
+import csv, os, sys, html, json, collections, datetime as dt
 sys.stdout.reconfigure(encoding='utf-8')
 
 BASE = 'https://jwpaparoy.github.io/jari/'
@@ -71,7 +71,8 @@ import hashlib
 CSS_V = hashlib.md5(CSS.encode()).hexdigest()[:8]   # CSS가 바뀌면 주소가 바뀌어 캐시를 피함
 open(f'{DOCS}/p.css', 'w', encoding='utf-8', newline='\n').write(CSS)
 
-def page(path, title, desc, body, kind, canon):
+SRC_SHOP = '자료: 행정안전부 LOCALDATA 인허가, 서울시 상권분석서비스(상권 영역·추정매출), 서울시 학원·교습소 정보, 한국부동산원 상업용부동산 임대동향. 생존율은 2016년 이후 문을 연 가게 중 개업 후 N년이 지난 가게가 그 시점에 영업 중이었던 비율입니다.'
+def page(path, title, desc, body, kind, canon, src=SRC_SHOP):
     track = ("<script>try{var r=document.referrer,s='direct';if(r){var h=new URL(r).hostname;s=h===location.hostname?'internal':"
              "['google','naver','daum','bing'].find(function(k){return h.indexOf(k)>=0})||'other'}"
              f"fetch('{SB}/rest/v1/rpc/hit',{{method:'POST',headers:{{apikey:'{ANON}',Authorization:'Bearer {ANON}','Content-Type':'application/json'}},"
@@ -81,7 +82,7 @@ def page(path, title, desc, body, kind, canon):
 <meta property="og:title" content="{e(title)}"><meta property="og:description" content="{e(desc)}"><meta property="og:type" content="website">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
 <link rel="stylesheet" href="{'../' if '/' in path else ''}p.css?v={CSS_V}"></head><body><header><a href="{'../' if '/' in path else ''}./">jari · 창업 자리 생존율 지도</a></header><main>{body}
-<footer>자료: 행정안전부 LOCALDATA 인허가, 서울시 상권분석서비스(상권 영역·추정매출), 서울시 학원·교습소 정보, 한국부동산원 상업용부동산 임대동향. 생존율은 2016년 이후 문을 연 가게 중 개업 후 N년이 지난 가게가 그 시점에 영업 중이었던 비율입니다. {e(built)} 기준.</footer>
+<footer>{src} {e(built)} 기준.</footer>
 </main>{track}</body></html>"""
     os.makedirs(os.path.dirname(f'{DOCS}/{path}') or DOCS, exist_ok=True)
     open(f'{DOCS}/{path}', 'w', encoding='utf-8', newline='\n').write(doc)
@@ -185,10 +186,70 @@ page('list.html', '서울 25개 구 상권별 가게 생존율 | jari', '서울 
      'list', 'list.html')
 urls.append('list.html')
 
+# ---------- 행정동 외국인 민박 페이지(민박이 있거나 밤 외국인이 100명 이상인 동만)
+dongs = rd('dong'); sm = json.loads(open(f'{T}/p_stay_meta.json', encoding='utf-8').read() or '{}')
+fd = lambda x: float(x) if x not in (None, '') else None
+D = lambda s: f'{s[:4]}.{s[4:6]}.{s[6:]}' if s else ''
+SPOP = f"{D(sm.get('spop_from', ''))}~{D(sm.get('spop_to', ''))[5:]}"
+SRC_STAY = (f'자료: 행정안전부 LOCALDATA 외국인관광 도시민박업·한옥체험업·숙박업 인허가(등록하지 않은 숙소는 빠짐), 서울시 단기체류 외국인 생활인구 {SPOP} 평균(밤 01~05시·낮 11~18시), '
+            '행정동 경계(통계청·행정안전부, vuski/admdongkor 가공본). 숙박 객실당 밤 외국인 = 밤 외국인 ÷ (민박 객실 + 호텔·모텔 등 객실 + 10).')
+so3 = sum(i(d['o3']) for d in dongs); ss3 = sum(i(d['s3']) for d in dongs)
+rank_open = {d['cd']: 1 + sum(1 for x in dongs if i(x['n_open']) > i(d['n_open'])) for d in dongs}
+DBY = {d['cd']: d for d in dongs}
+def dnear(d, k=6):
+    la, lo = fd(d['lat']), fd(d['lon'])
+    return [c for _, c in sorted((((fd(x['lat']) - la) * 111) ** 2 + ((fd(x['lon']) - lo) * 88) ** 2, x['cd']) for x in dongs if x['cd'] != d['cd'])[:k]]
+def listed(d): return i(d['n_open']) > 0 or (fd(d['night']) or 0) >= 100
+nd = 0
+for d in dongs:
+    if not listed(d): continue
+    no, night = i(d['n_open']), fd(d['night'])
+    name, gu = d['name'], d['gu']
+    o3, s3, n1, n0 = i(d['o3']), i(d['s3']), i(d['new1']), i(d['new0'])
+    lead = []
+    if no: lead.append(f'{e(name)}에 영업 중인 외국인 민박은 <b>{no:,}곳</b>(객실 {i(d["rooms"]):,}개)으로 서울 행정동 {len(dongs)}곳 중 {rank_open[d["cd"]]}위입니다.')
+    if n1 + n0 >= 6: lead.append(f'최근 1년 새로 등록한 곳은 <b>{n1:,}곳</b>, 그 전 1년은 {n0:,}곳입니다.')
+    if o3 >= 15 and so3: lead.append(f'3년이 지난 민박 {o3:,}곳 중 <b>{round(100 * s3 / o3)}%</b>가 아직 영업 중입니다(서울 {round(100 * ss3 / so3)}%).')
+    if night is not None and night >= 100:
+        pr, pc = fd(d['per_room']), fd(d['pct'])
+        lead.append(f'밤(01~05시)에 이 동에 머무는 단기체류 외국인은 평균 <b>{round(night):,}명</b>'
+                    + (f', 숙박 객실 1개당 {pr:.1f}명으로 서울 상위 {max(1, round((1 - pc) * 100))}%입니다.' if pc is not None else '입니다.'))
+    bm = json.loads(d['bmix'] or '{}')
+    third = ('밤 외국인', f'{round(night):,}명') if night is not None else ('객실', f'{i(d["rooms"]):,}개')
+    cards = (f'<div class="cards"><div class="card"><span>영업 중 민박</span><b>{no:,}곳</b></div>'
+             f'<div class="card"><span>3년 생존</span><b>{pct(s3, o3) if o3 >= 15 else "—"}</b></div>'
+             f'<div class="card"><span>{third[0]}</span><b>{third[1]}</b></div></div>')
+    body = (f'<p class="sub">{e(gu)} · 행정동</p><h1>{e(name)} 외국인 민박(에어비앤비) 현황</h1>{cards}'
+            + (f'<div class="lead">{" ".join(lead)}</div>' if lead else '') + f'<a class="btn" href="../#d={d["cd"]}">지도에서 민박 위치 보기</a>')
+    day = fd(d['day'])
+    rows = [('영업 중 민박', f'{no:,}곳'), ('민박 객실', f'{i(d["rooms"]):,}개'), ('한옥체험업', f'{i(d["hanok"]):,}곳'), ('호텔·모텔 등 숙박업 객실', f'{i(d["hotel"]):,}개'),
+            ('최근 1년 새로 등록 / 폐업', f'{n1:,}곳 / {i(d["close1"]):,}곳'), ('1년 생존', pct(i(d['s1']), i(d['o1']))), ('3년 생존', pct(s3, o3) + f' ({o3:,}곳 중)'),
+            ('밤 외국인(01~05시)', f'{round(night):,}명' if night is not None else '—'), ('낮 외국인(11~18시)', f'{round(day):,}명' if day is not None else '—')]
+    body += '<h2>숫자로 보기</h2><div class="tw"><table><tbody>' + ''.join(f'<tr><td>{k}</td><td class="r num">{v}</td></tr>' for k, v in rows) + '</tbody></table></div>'
+    if bm: body += '<h2>어떤 집에서 하나</h2><p>' + ' · '.join(f'{e(k)} <b class="num">{v}</b>' for k, v in bm.items()) + '</p>'
+    nb = [c for c in dnear(d) if listed(DBY[c])]
+    if nb: body += '<h2>가까운 동</h2><div class="links">' + ''.join(f'<a href="{c}.html">{e(DBY[c]["name"])}</a>' for c in nb) + '</div>'
+    body += '<p><a href="../stay.html">서울 외국인 민박 동별 목록</a></p>'
+    desc = (f'{name}({gu}) 외국인관광 도시민박 영업 {no}곳, 최근 1년 신규 {n1}곳' + (f', 3년 생존율 {pct(s3, o3)}' if o3 >= 15 else '')
+            + (f', 밤 단기체류 외국인 {round(night):,}명' if night is not None else '') + '.')
+    page(f'd/{d["cd"]}.html', f'{name} 외국인 민박·에어비앤비 현황 ({gu}) | jari', desc, body, 'dong', f'd/{d["cd"]}.html', SRC_STAY)
+    urls.append(f'd/{d["cd"]}.html'); nd += 1
+ld = sorted([d for d in dongs if i(d['n_open'])], key=lambda d: -i(d['n_open']))
+def lrow(d):
+    nt = fd(d['night'])
+    return (f'<tr><td><a href="d/{d["cd"]}.html">{e(d["name"])}</a> <span class="sub">{e(d["gu"])}</span></td><td class="r num">{i(d["n_open"]):,}</td><td class="r num">{i(d["new1"]):,}</td>'
+            f'<td class="r num">{pct(i(d["s3"]), i(d["o3"])) if i(d["o3"]) >= 15 else "—"}</td><td class="r num">{f"{round(nt):,}" if nt is not None else "—"}</td></tr>')
+tot = sum(i(d['n_open']) for d in dongs)
+page('stay.html', '서울 외국인 민박(에어비앤비) 동별 현황 | jari', f'서울 행정동별 외국인관광 도시민박 영업 {tot:,}곳, 최근 1년 신규, 3년 생존율, 밤 단기체류 외국인 수.',
+     f'<h1>서울 외국인 민박, 동별로 보면</h1><p class="sub">영업 중 {tot:,}곳 · 민박 많은 동부터</p><a class="btn" href="./">지도에서 보기</a>'
+     f'<div class="tw"><table><thead><tr><th>행정동</th><th class="r">영업</th><th class="r">1년 신규</th><th class="r">3년 생존</th><th class="r">밤 외국인</th></tr></thead><tbody>{"".join(lrow(d) for d in ld)}</tbody></table></div>',
+     'list', 'stay.html', SRC_STAY)
+urls.append('stay.html')
+
 today = dt.date.today().isoformat()
 with open(f'{DOCS}/sitemap.xml', 'w', encoding='utf-8', newline='\n') as fh:
     fh.write('<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n')
     for u in [''] + urls: fh.write(f'<url><loc>{BASE}{u}</loc><lastmod>{today}</lastmod></url>\n')
     fh.write('</urlset>\n')
 open(f'{DOCS}/robots.txt', 'w', encoding='utf-8', newline='\n').write(f'User-agent: *\nAllow: /\nSitemap: {BASE}sitemap.xml\n')
-print(f'페이지 {len(urls):,}개 (상권 {len(areas):,}, 구 {len(gu_rows)})')
+print(f'페이지 {len(urls):,}개 (상권 {len(areas):,}, 구 {len(gu_rows)}, 행정동 {nd})')

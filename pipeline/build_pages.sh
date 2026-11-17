@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# DB → data/tmp/p_*.csv → 정적 페이지(docs/a, docs/g, docs/list.html, docs/sitemap.xml)
+# DB → data/tmp/p_*.csv → 정적 페이지(docs/a, docs/g, docs/d, docs/list.html, docs/stay.html, docs/sitemap.xml)
 set -euo pipefail
 cd "$(dirname "$0")/.."
 mkdir -p data/tmp
@@ -13,6 +13,8 @@ set statement_timeout = 0;
 \copy (select area_code code, sum(k) n, string_agg(f || ' ' || k, ' · ' order by k desc) fields from (select area_code, coalesce(nullif(field,''),'기타') f, count(*) k from academy where closed_on is null and area_code is not null group by 1, 2) x group by 1) to 'data/tmp/p_acad.csv' with (format csv, header true)
 \copy (select coalesce(value->>'built', '') from meta where key = 'build') to 'data/tmp/p_built.txt'
 \copy (select ar.code, ar.region, ar.dist, r.kind, r.q, r.rent, r.vac from area_rent ar join rent r on r.region = ar.region where r.q in ((select max(q) from rent), (select max(q) from rent) - 10)) to 'data/tmp/p_rent.csv' with (format csv, header true)
+\copy (select cd, name, gu, lat, lon, n_open, rooms, hotel, hanok, new1, new0, close1, o1, s1, o3, s3, night, day, per_room, pct, night_pct, bmix from dong) to 'data/tmp/p_dong.csv' with (format csv, header true)
+\copy (select value::text from meta where key = 'stay') to 'data/tmp/p_stay_meta.json'
 SQL
 bash ./db.sh -q -f data/tmp/pages_export.sql
 python -I pipeline/build_pages.py
