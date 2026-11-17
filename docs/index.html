@@ -1491,9 +1491,9 @@ async function showDong(cd){
 async function goStay(cd){ showDong(cd); }
 
 // ---------- 이 집으로 외국인관광 도시민박 등록이 될까: 브이월드 건물 주용도·연면적으로 1차 판정
-// 기준(서울시 서울스테이 등록 안내): 단독·다가구·아파트·연립·다세대, 주택 연면적 230㎡ 미만, 신청인이 주민등록하고 거주.
+// 기준(관광진흥법 시행령 제2조제1항제3호바목·별표1 제4호바목, 2026-10-29 시행): 도시지역 주민이 거주하는 단독·다가구·아파트·연립·다세대, 주택 연면적 230㎡ 미만.
 // 등록 불가로 안내되는 것: 오피스텔·원룸·근린생활시설. 브이월드 주용도는 대분류(단독주택/공동주택…)뿐이라 다중주택 등 세부는 못 가림.
-const REG_SRC = '<a href="https://stay.visitseoul.net/cms/registration1" target="_blank" rel="noopener">서울시 서울스테이 등록 안내</a>';
+const REG_SRC = '<a href="https://www.law.go.kr/' + encodeURI('법령/관광진흥법시행령') + '" target="_blank" rel="noopener">관광진흥법 시행령 제2조·별표1</a>';
 function regVerdict(b){
   if(!b) return {lv:'na', t:'건물 정보를 찾지 못했습니다', s:'지도를 건물 위에 더 정확히 눌러 보세요.'};
   const u = (b.usability || '').slice(0, 2), a = +b.totalarea || 0, A = a ? fmt(Math.round(a)) + '㎡' : '';
@@ -1530,7 +1530,7 @@ function ledgerVerdict(g){
   const homeA = home.reduce((s, x) => s + (x.area || 0), 0), mixed = home.length < fl.length;
   const floorsTxt = home.map(x => (x.dong ? x.dong + ' ' : '') + x.flr).join(', ');
   const oneroom = home.filter(x => /원룸|도시형생활/.test(x.etc || ''));
-  const orTxt = oneroom.length ? (oneroom.length === home.length ? '주택 층이 모두' : oneroom.map(x => x.flr).join(', ') + '이') + ' 원룸형·도시형생활주택으로 적혀 있습니다. 서울시 안내에 원룸은 등록 불가로 나와 있어 구청 확인이 꼭 필요합니다. ' : '';
+  const orTxt = oneroom.length ? (oneroom.length === home.length ? '주택 층이 모두' : oneroom.map(x => x.flr).join(', ') + '이') + ' 원룸형·도시형생활주택으로 적혀 있습니다. 법령상 다세대·연립이면 대상 유형이지만 서울시 안내는 원룸을 등록 불가로 적고 있어 구청 확인이 꼭 필요합니다. ' : '';
   if(home.some(x => /^02/.test(x.cd))){
     const u = g.units;
     const unitTxt = u && u.n ? '세대 전용면적 ' + (u.min === u.max ? A(u.min) : A(u.min) + '~' + A(u.max)) + '(' + fmt(u.n) + '세대)' : '';
@@ -1555,33 +1555,62 @@ function hanokVerdict(g){
   if(!t) return {lv:'na', t:'건축물대장을 찾지 못해 판단하지 못했습니다', s:'건물 한가운데를 다시 눌러 보세요.'};
   const st = t.map(x => x.strct || '').join(' '), rf = t.map(x => x.roof || '').join(' ');
   const wood = t.some(x => /^\S*목(구)?조/.test(x.strct || '')), tile = /기와|한식/.test(rf);   // 주구조가 목구조인 건물만
-  if(wood && tile) return {lv:'good', t:'목구조·기와지붕 — 한옥일 가능성이 높습니다', s:'구조 ' + st.trim() + ' · 지붕 ' + rf.trim() + '. 한옥체험업은 「한옥 등 건축자산의 진흥에 관한 법률」의 한옥이어야 하고, 거주 의무가 없어 여러 채 운영과 내국인 손님이 가능한 것으로 알려져 있습니다.'};
-  if(wood) return {lv:'mid', t:'목구조 건물입니다', s:'지붕이 ' + (rf.trim() || '기록 없음') + '이라 한옥 해당 여부는 구청 확인이 필요합니다.'};
-  return {lv:'bad', t:'한옥이 아닙니다', s:'건축물대장 구조: ' + (st.trim() || '기록 없음') + '.'};
+  const area = t.reduce((a, x) => a + (x.area || 0), 0), A = fmt(Math.round(area)) + '㎡';
+  const sz = area >= 230 ? ' 건물 연면적이 ' + A + '이라, 숙박 체험에 쓰는 공간(객실·편의시설)을 230㎡ 미만으로 나눠 써야 합니다(문화유산·우수건축자산·구 조례 지정 한옥은 예외).' : ' 연면적 ' + A + '로 230㎡ 미만입니다.';
+  if(wood && tile) return {lv: area >= 230 ? 'mid' : 'good', t:'목구조·기와지붕 — 한옥일 가능성이 높습니다', s:'구조 ' + st.trim() + ' · 지붕 ' + rf.trim() + '.' + sz + ' 한옥체험업은 국토교통부가 고시한 한옥 기준에 맞아야 하고, 정의에 거주 요건이 없습니다.'};
+  if(wood) return {lv:'mid', t:'목구조 건물입니다', s:'지붕이 ' + (rf.trim() || '기록 없음') + '이라 한옥 기준(기둥·보·한식지붕틀의 목구조, 전통양식) 해당 여부는 구청 확인이 필요합니다.'};
+  return {lv:'bad', t:'한옥이 아닙니다', s:'건축물대장 구조: ' + (st.trim() || '기록 없음') + '. 한옥은 주요 구조가 기둥·보·한식지붕틀로 된 목구조여야 합니다.'};
 }
-function lodgeVerdict(L, g){
+// 주거지역(준주거 포함) 경계까지 거리: 브이월드 용도지역 경계(LT_C_UQ111)로 근사
+function segDist(px, py, ax, ay, bx, by){ const dx = bx - ax, dy = by - ay, l = dx*dx + dy*dy; let t = l ? ((px-ax)*dx + (py-ay)*dy) / l : 0; t = Math.max(0, Math.min(1, t)); const x = ax + t*dx - px, y = ay + t*dy - py; return Math.sqrt(x*x + y*y); }
+async function resiDist(lat, lon){
+  const dLat = 260/111000, dLon = 260/88000;
+  const d = await vwq('/req/data', {service:'data', request:'GetFeature', data:'LT_C_UQ111', geomFilter:`BOX(${lon-dLon},${lat-dLat},${lon+dLon},${lat+dLat})`, crs:'EPSG:4326', geometry:'true', size:'100'}).catch(() => null);
+  if(d?.response?.status === 'NOT_FOUND') return Infinity;
+  if(d?.response?.status !== 'OK') return null;
+  const kx = 111320 * Math.cos(lat * Math.PI / 180), ky = 110540;
+  let best = Infinity;
+  for(const f of d.response.result.featureCollection.features){
+    if(!/주거/.test(f.properties.uname || '')) continue;
+    const polys = f.geometry.type === 'MultiPolygon' ? f.geometry.coordinates : [f.geometry.coordinates];
+    for(const poly of polys) for(const ring of poly) for(let i = 1; i < ring.length; i++)
+      best = Math.min(best, segDist(0, 0, (ring[i-1][0]-lon)*kx, (ring[i-1][1]-lat)*ky, (ring[i][0]-lon)*kx, (ring[i][1]-lat)*ky));
+  }
+  return best;
+}
+function lodgeVerdict(L, g, dist){
   const z = L && L.c ? L.c.prposArea1Nm || '' : '';
   const fl = (g && g.floors || []).filter(x => x.main && /^15/.test(x.cd || ''));
+  const PART = ' 건물 일부로 숙박업을 하려면 객실이 독립된 층이거나 30실 이상, 또는 영업장이 건물 연면적의 3분의 1 이상이어야 합니다.';
   if(fl.length) return {lv:'good', t:'이미 숙박시설 용도인 층이 있습니다', s:fl.map(x => x.flr + ' ' + x.nm).join(', ') + '. 숙박업 신고 대상 건물입니다.'};
   if(!z) return {lv:'na', t:'용도지역을 찾지 못했습니다', s:''};
-  if(/주거/.test(z) && !/준주거/.test(z)) return {lv:'bad', t:z + ' — 숙박시설을 지을 수도, 용도를 바꿀 수도 없습니다', s:'전용·일반주거지역은 숙박시설이 허용되지 않습니다.'};
-  if(/준주거/.test(z)) return {lv:'mid', t:z + ' — 원칙적으로 제한, 예외 조건 있음', s:'주택 밀집지역과의 거리 등 조례 조건을 맞추면 생활숙박시설이 가능한 경우가 있어 구청 확인이 필요합니다.'};
-  if(/상업/.test(z)) return {lv:'mid', t:z + ' — 숙박시설 가능성 있음', s:'서울시 안내 기준으로 주거지역 경계 50m 안은 일반숙박시설 건축·용도변경 불가, 50~200m는 도시계획위원회 심의로 제한될 수 있습니다. 숙박시설로 용도변경해 숙박업 신고를 해야 합니다.'};
-  if(/녹지/.test(z)) return {lv:'bad', t:z + ' — 숙박시설이 대체로 허용되지 않습니다', s:''};
+  if(/전용주거|일반주거/.test(z)) return {lv:'bad', t:z + ' — 숙박시설 불가', s:'국토계획법 시행령상 이 지역에 지을 수 있는 건축물 목록에 숙박시설이 없습니다.'};
+  if(/준주거/.test(z)) return {lv:'bad', t:z + ' — 서울에서는 숙박시설 불가', s:'국토계획법 시행령이 준주거지역의 숙박시설을 막고(생활숙박시설만 조건부 예외), 서울시 도시계획 조례가 그 생활숙박시설도 금지합니다.'};
+  if(/유통상업|공업/.test(z)) return {lv:'bad', t:z + ' — 서울에서는 숙박시설 불가', s:'서울시 도시계획 조례가 이 지역의 숙박시설을 금지합니다.'};
+  if(/녹지|관리|농림|보전/.test(z)) return {lv:'bad', t:z + ' — 숙박시설 불가', s:''};
+  if(/상업/.test(z)){
+    const D = dist == null ? null : dist === Infinity ? '260m 안에 없음' : '약 ' + Math.round(dist) + 'm';
+    const rule = '서울시 도시계획 조례: 주거지역 경계 50m 이내는 일반·생활숙박시설로 건축·용도변경 불가, 50~200m는 도시계획위원회 심의로 제한될 수 있음(6m 이상 도로에 접하면 도로 너비를 거리에 포함). 호스텔·소형호텔 같은 관광숙박시설은 이 거리 제한 대상이 아닙니다.';
+    if(dist == null) return {lv:'mid', t:z + ' — 숙박시설 가능성 있음', s:rule + PART};
+    if(dist <= 50) return {lv:'bad', t:z + ' · 주거지역까지 ' + D + ' — 일반·생활숙박 불가', s:rule + PART};
+    if(dist <= 200) return {lv:'mid', t:z + ' · 주거지역까지 ' + D + ' — 심의로 제한될 수 있음', s:rule + PART};
+    return {lv:'good', t:z + ' · 주거지역까지 ' + D + ' — 거리 제한 밖', s:'용도지역상 숙박시설이 가능해 보입니다. 숙박시설로 용도변경 후 숙박업 신고를 해야 합니다.' + PART};
+  }
   return {lv:'mid', t:z + ' — 숙박시설 허용 여부 확인 필요', s:''};
 }
-function bizHtml(L, g){
+function bizHtml(L, g, dist){
   const row = (name, v) => { const cls = {good:'good', bad:'bad', mid:'', na:'note'}[v.lv];
     return '<div class="regbox reg-' + v.lv + '"><span class="note">' + name + '</span><br><b class="' + cls + '">' + esc(v.t) + '</b>' + (v.s ? '<br><span class="note">' + esc(v.s) + '</span>' : '') + '</div>'; };
-  return row('한옥체험업', g === undefined ? {lv:'na', t:'건축물대장 불러오는 중…', s:''} : hanokVerdict(g)) + row('숙박업(일반·생활숙박)', lodgeVerdict(L, g || null)) +
-    '<p class="note">한옥체험업·숙박업 판정은 건축물대장 구조·용도와 용도지역으로 본 참고용입니다. 기준 ' + LODGE_SRC + '</p>';
+  return row('한옥체험업', g === undefined ? {lv:'na', t:'건축물대장 불러오는 중…', s:''} : hanokVerdict(g)) + row('숙박업(일반·생활숙박)', lodgeVerdict(L, g || null, dist)) +
+    '<p class="note">건축물대장·용도지역으로 본 1차 판정이며 거리는 누른 지점 기준 근사치입니다. 근거 ' + LAW_SRC + '</p>';
 }
-const LODGE_SRC = '<a href="https://opengov.seoul.go.kr/civilappeal/2896468" target="_blank" rel="noopener">서울시 용도지역 행위제한 안내</a>';
+const LAWL = (n, t) => '<a href="https://www.law.go.kr/' + encodeURI(n) + '" target="_blank" rel="noopener">' + t + '</a>';
+const LAW_SRC = LAWL('법령/관광진흥법시행령', '관광진흥법 시행령') + ' · ' + LAWL('법령/국토의계획및이용에관한법률시행령', '국토계획법 시행령') + ' · ' + LAWL('자치법규/서울특별시도시계획조례', '서울시 도시계획 조례') + ' · ' + LAWL('법령/공중위생관리법시행규칙', '공중위생관리법 시행규칙');
 async function fillLedger(tok, L){
   if(!L || !L.pnu) return;
-  const g = await rpc('bld_ledger', {p_pnu: L.pnu}).catch(() => null);
+  const g = await rpc('bld_ledger', {p_pnu: L.pnu}).catch(() => null); L._g = g;
   if(tok !== panelTok || !$('reg')) return;
-  if($('biz')) $('biz').innerHTML = bizHtml(L, g);
+  if($('biz')) $('biz').innerHTML = bizHtml(L, g, L._dist);
   const v = ledgerVerdict(g);
   if(!v) return;
   const cls = {good:'good', bad:'bad', mid:''}[v.lv];
@@ -1610,6 +1639,7 @@ async function showHouse(lat, lon, title, addr){
   if(tok !== panelTok) return;
   $('reg').innerHTML = regHtml(L);
   $('biz').innerHTML = bizHtml(L, L && L.pnu ? undefined : null);
+  if(L && L.c && /상업/.test(L.c.prposArea1Nm || '')) resiDist(lat, lon).then(dd => { if(tok !== panelTok || !$('biz')) return; L._dist = dd; if(!L.pnu) $('biz').innerHTML = bizHtml(L, null, dd); else if(L._g !== undefined) $('biz').innerHTML = bizHtml(L, L._g, dd); });
   $('land').innerHTML = landHtml(L);
   fillLedger(tok, L);
 }
