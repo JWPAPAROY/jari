@@ -325,14 +325,14 @@ locCtl.addTo(map);
 const legend = L.control({position:'bottomleft'});
 legend.onAdd = () => { const d = L.DomUtil.create('div','legend' + (MOBILE() ? ' closed' : '')); d.id = 'legend'; L.DomEvent.disableClickPropagation(d); d.addEventListener('click', () => d.classList.toggle('closed')); return d; };
 legend.addTo(map);
-// 건물 점 설명: 점은 보기·업종·연차와 상관없이 늘 '모든 업종 3년 생존율'
+// 건물 점 설명: 점은 보기·업종과 상관없이 '모든 업종', 연차는 위쪽 선택을 따름
 function dotKey(trend){
   const d = (c, r, ring) => '<i class="dot" style="width:'+r+'px;height:'+r+'px;background:'+css(c)+(ring ? ';box-shadow:0 0 0 1px #fff, 0 0 0 2px rgba(0,0,0,.25)' : '')+'"></i>';
   return '<div class="dotkey"><b>건물 점</b> <span class="muted">(크게 확대하면)</span><br>' +
-    d('--c5', 12, 1) + d('--c3', 12, 1) + d('--c1', 12, 1) + ' 색 = 그 건물 3년 생존율<br>' +
+    d('--c5', 12, 1) + d('--c3', 12, 1) + d('--c1', 12, 1) + ' 색 = 그 건물 '+state.y+'년 생존율<br>' +
     '<span class="muted">초록 높음 · 빨강 낮음, 모든 업종 기준' + (trend ? ' (상권 색과 기준이 다름)' : '') + '</span><br>' +
     d('--c4', 7, 1) + d('--c4', 14, 1) + ' 클수록 거쳐 간 가게가 많음<br>' +
-    d('--cna', 6, 0) + ' 회색 작은 점 = 기록 부족(3곳 미만)</div>';
+    d('--cna', 6, 0) + ' 회색 작은 점 = 기록 부족('+state.y+'년 지난 가게 3곳 미만)</div>';
 }
 function drawLegend(){
   if(state.mode === 'trend'){
@@ -390,28 +390,33 @@ function drawAreas(){
     poly.addTo(areaLayer);
   }
 }
-let bldTimer = null, bldTok = 0;
+let bldTimer = null, bldTok = 0, BLD_RAW = [];
 async function drawBuildings(){
   bldLayer.clearLayers();
   const tok = ++bldTok;
   if(map.getZoom() < 16) return;
   const b = map.getBounds();
-  const raw = await rpc('buildings_view', {min_lat:b.getSouth(), min_lon:b.getWest(), max_lat:b.getNorth(), max_lon:b.getEast()});
+  BLD_RAW = await rpc('buildings_view', {min_lat:b.getSouth(), min_lon:b.getWest(), max_lat:b.getNorth(), max_lon:b.getEast()});
   if(tok !== bldTok) return;
+  paintBuildings();
+}
+function color3(rate){ const y = state.y; state.y = 3; const c = color(rate); state.y = y; return c; }
+// 점 색 = 위쪽에서 고른 연차(1·2·3년)의 그 건물 생존율(모든 업종). 연차를 바꾸면 다시 받지 않고 다시 칠함
+function paintBuildings(){
   bldLayer.clearLayers();
-  for(const [jkey, lat, lon, n, n_open, o3, s3] of raw){
-    const r = {jkey, lat, lon, n, n_open, o3, s3};
-    const o = r['o3'], s = r['s3'];
+  if(map.getZoom() < 16) return;
+  const y = state.y;
+  for(const [jkey, lat, lon, n, n_open, o3, s3, o1, s1, o2, s2] of BLD_RAW){
+    const o = [0, o1, o2, o3][y], s = [0, s1, s2, s3][y];
     const rate = o >= MIN_BLD ? s/o : null;
     const c = rate == null
-      ? L.circleMarker([r.lat, r.lon], {radius: 4, color:'#fff', weight:1, fillColor: color3(null), fillOpacity:.85})
-      : L.circleMarker([r.lat, r.lon], {radius: 4 + Math.min(8, Math.sqrt(r.n)*1.6), color:'#fff', weight:1, fillColor: color3(rate), fillOpacity:.92});
-    c.on('click', e => { L.DomEvent.stopPropagation(e); showBuilding(r.jkey); });
-    c.bindTooltip(esc(r.jkey.split('|')[1]) + ' · 가게 ' + r.n + '곳' + (rate!=null ? ' · 3년 생존 ' + Math.round(rate*100) + '%' : ' · 3년 지난 가게 ' + (o||0) + '곳(생존율 계산엔 ' + MIN_BLD + '곳 필요)'));
+      ? L.circleMarker([lat, lon], {radius: 4, color:'#fff', weight:1, fillColor: color(null), fillOpacity:.85})
+      : L.circleMarker([lat, lon], {radius: 4 + Math.min(8, Math.sqrt(n)*1.6), color:'#fff', weight:1, fillColor: color(rate), fillOpacity:.92});
+    c.on('click', e => { L.DomEvent.stopPropagation(e); showBuilding(jkey); });
+    c.bindTooltip(esc(jkey.split('|')[1]) + ' · 가게 ' + n + '곳' + (rate!=null ? ' · ' + y + '년 생존 ' + Math.round(rate*100) + '% (' + o + '곳 중)' : ' · ' + y + '년 지난 가게 ' + (o||0) + '곳(생존율 계산엔 ' + MIN_BLD + '곳 필요)'));
     c.addTo(bldLayer);
   }
 }
-function color3(rate){ const y = state.y; state.y = 3; const c = color(rate); state.y = y; return c; }
 map.on('moveend', () => { clearTimeout(bldTimer); bldTimer = setTimeout(drawBuildings, 250); });
 map.on('zoomend', () => areaLayer.eachLayer(l => l.setStyle({fillOpacity: map.getZoom() >= 16 ? .12 : .45})));
 map.on('click', e => { if(map.getZoom() >= 15) showPoint(e.latlng.lat, e.latlng.lng); });
@@ -1068,7 +1073,7 @@ document.querySelectorAll('#mode button').forEach(b => b.addEventListener('click
 document.querySelectorAll('#yrs button').forEach(b => b.addEventListener('click', () => {
   state.y = +b.dataset.y;
   document.querySelectorAll('#yrs button').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
-  drawAreas(); drawLegend();
+  drawAreas(); drawLegend(); paintBuildings();
 }));
 
 (async () => {

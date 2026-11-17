@@ -108,6 +108,10 @@ def jkey(addr):
     if not m: return None
     return f"{m.group(1)}|{m.group(2)} {m.group(4)}" + (f"-{m.group(5)}" if m.group(5) and m.group(5) != '0' else '')
 
+def road_short(road):   # '서울특별시 마포구 월드컵북로2길 31, 2층 (동교동)' → '서울특별시 마포구 월드컵북로2길 31'
+    m = re.match(r'(.+?(?:로|길)\s*\d+(?:-\d+)?)(?=[\s,(]|$)', road or '')
+    return m.group(1) if m else (road or '').split(',')[0].split(' (')[0].strip()
+
 def d(s):
     try: return dt.date.fromisoformat((s or '').strip()[:10])
     except ValueError: return None
@@ -215,7 +219,7 @@ def process_gu(gu, areas, idx, wl, wc):
     nc = 0
     for s in stores:
         wl.writerow([s['id'], gu, s['kind'], s['name'], s['biz'], s['svc'] or '', s['open'], s['close'] or '',
-                     s['status'], s['jibun'], s['road'], s['jkey'] or '', s['size'] or '', s['floor'],
+                     s['status'], '', road_short(s['road']), s['jkey'] or '',   # 용량: 지번 원문은 안 씀(jkey로 대신), 도로명은 건물번호까지만 s['size'] or '', s['floor'],
                      't' if s['chain'] else 'f', s['lat'] or '', s['lon'] or '', s['area'] or '',
                      (s['close'] - s['open']).days if s['close'] and not continued(s) else '',
                      'f' if continued(s) else 't'])
