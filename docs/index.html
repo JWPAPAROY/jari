@@ -188,6 +188,8 @@ details.sec .sbody{padding-bottom:4px}
 .mixbar{display:flex; height:10px; border-radius:3px; overflow:hidden; margin:6px 0 4px}
 .mixbar i{display:block; height:100%}
 .btn-go{font:inherit; font-size:13px; margin-top:8px; background:var(--accent); color:var(--panel); border:0; border-radius:999px; padding:6px 14px; cursor:pointer}
+.regbox{border:1px solid var(--line);border-left:4px solid var(--line);border-radius:8px;padding:10px 12px;margin:8px 0 12px;line-height:1.55}
+.reg-good{border-left-color:var(--t5)}.reg-bad{border-left-color:var(--t1)}.reg-mid{border-left-color:var(--t3)}
 </style>
 </head>
 <body>
@@ -495,7 +497,7 @@ function paintBuildings(){
 map.on('moveend', () => { clearTimeout(bldTimer); bldTimer = setTimeout(drawBuildings, 250); });
 map.on('zoomend', () => { areaLayer.eachLayer(l => l.setStyle({fillOpacity: map.getZoom() >= 16 ? .12 : .45})); dongLayer.eachLayer(l => l.setStyle({fillOpacity: map.getZoom() >= 15 ? .1 : .42})); });
 map.on('click', e => {
-  if(state.mode === 'stay'){ const d = dongAt(e.latlng.lat, e.latlng.lng); if(d) showDong(d.cd); return; }
+  if(state.mode === 'stay'){ if(map.getZoom() >= 17) return showHouse(e.latlng.lat, e.latlng.lng); const d = dongAt(e.latlng.lat, e.latlng.lng); if(d) showDong(d.cd); return; }
   if(map.getZoom() >= 15) showPoint(e.latlng.lat, e.latlng.lng);
 });
 
@@ -1038,7 +1040,7 @@ function setLink(k, id){
   try{ history.replaceState(null, '', location.pathname + (k ? '#' + k + '=' + encodeURIComponent(id) + (state.svc !== '전체' ? '&s=' + encodeURIComponent(state.svc) : '') : '')); }catch(e){}
 }
 function readLink(){
-  const m = decodeURIComponent(location.hash || '').match(/^#([abd])=([^&]+)(?:&s=(.+))?$/);
+  const m = decodeURIComponent(location.hash || '').match(/^#([abdh])=([^&]+)(?:&s=(.+))?$/);
   return m ? {k:m[1], id:m[2], s:m[3] || null} : null;
 }
 // ---------- 임대료·공실률(한국부동산원 표본조사, 가까운 조사 상권 값)
@@ -1263,6 +1265,7 @@ async function pick(h){
   $('results').hidden = true; $('q').blur();
   if(state.mode === 'stay'){
     let ll = h.kind === 'area' ? AREAS.find(a => a.code === h.id) : h.kind === 'building' ? (await rest('building?select=lat,lon&jkey=eq.' + encodeURIComponent(h.id)).catch(() => []))[0] : h;
+    if(h.kind !== 'area' && ll && ll.lat){ fly(ll.lat, ll.lon, Math.max(map.getZoom(), 17)); return showHouse(ll.lat, ll.lon, h.label, h.addr); }
     await loadDongs(); const d = ll && ll.lat ? dongAt(ll.lat, ll.lon) : null;
     if(d) return showDong(d.cd);
   }
@@ -1486,6 +1489,51 @@ async function showDong(cd){
   $('dar').querySelectorAll('[data-area]').forEach(r => r.onclick = async () => { await setMode('surv', true); showArea(r.dataset.area); });
 }
 async function goStay(cd){ showDong(cd); }
+
+// ---------- 이 집으로 외국인관광 도시민박 등록이 될까: 브이월드 건물 주용도·연면적으로 1차 판정
+// 기준(서울시 서울스테이 등록 안내): 단독·다가구·아파트·연립·다세대, 주택 연면적 230㎡ 미만, 신청인이 주민등록하고 거주.
+// 등록 불가로 안내되는 것: 오피스텔·원룸·근린생활시설. 브이월드 주용도는 대분류(단독주택/공동주택…)뿐이라 다중주택 등 세부는 못 가림.
+const REG_SRC = '<a href="https://stay.visitseoul.net/cms/registration1" target="_blank" rel="noopener">서울시 서울스테이 등록 안내</a>';
+function regVerdict(b){
+  if(!b) return {lv:'na', t:'건물 정보를 찾지 못했습니다', s:'지도를 건물 위에 더 정확히 눌러 보세요.'};
+  const u = (b.usability || '').slice(0, 2), a = +b.totalarea || 0, A = a ? fmt(Math.round(a)) + '㎡' : '';
+  if(u === '01') return a && a >= 230
+    ? {lv:'bad', t:'연면적 ' + A + ' — 230㎡ 미만 기준을 넘습니다', s:'단독주택 계열(단독·다가구)인데 건물 전체 연면적이 기준 이상입니다. 다가구에서 일부 층만 쓰는 경우 면적을 어떻게 셈하는지는 구청에 확인하세요.'}
+    : {lv:'good', t:'등록 대상 주택으로 보입니다', s:'단독주택 계열(단독·다가구)' + (A ? ', 연면적 ' + A + '로 230㎡ 미만' : '') + '. 건축물대장 세부 용도가 다중주택이면 대상 목록에 없습니다.'};
+  if(u === '02') return {lv:'mid', t:'대상 유형(아파트·연립·다세대)입니다', s:'건물 전체 연면적은 ' + (A || '확인 안 됨') + '. 공동주택에서 230㎡를 건물 전체로 보는지 세대로 보는지는 안내에 없어 구청 확인이 필요합니다.'};
+  if(u === '14') return {lv:'bad', t:'업무시설(오피스텔 등) — 등록 불가', s:'오피스텔은 도시민박 등록 대상이 아닙니다.'};
+  if(u === '03' || u === '04') return {lv:'bad', t:'주용도가 근린생활시설입니다', s:'근린생활시설 부분은 등록 불가입니다. 위층이 주택으로 허가된 건물(점포겸용주택)이면 그 층만 가능할 수 있어 건축물대장 층별 용도를 확인하세요.'};
+  if(u === '15') return {lv:'mid', t:'이미 숙박시설 용도입니다', s:'도시민박이 아니라 숙박업 대상 건물입니다.'};
+  return {lv:'bad', t:(BLD_USE[u] || '주택이 아닌 건물') + ' — 대상 주택이 아님', s:''};
+}
+function regHtml(L){
+  const v = regVerdict(L && L.bld), cls = {good:'good', bad:'bad', mid:'', na:'note'}[v.lv];
+  return '<div class="regbox reg-' + v.lv + '"><b class="' + cls + '">' + esc(v.t) + '</b>' + (v.s ? '<br><span class="note">' + esc(v.s) + '</span>' : '') +
+    '<br><span class="note">건물 주용도·연면적으로 본 1차 판정 · 기준 ' + REG_SRC + '</span></div>';
+}
+async function showHouse(lat, lon, title, addr){
+  track('house'); setLink('h', lat.toFixed(5) + ',' + lon.toFixed(5));
+  state.sel = {kind:'house', lat, lon}; const tok = ++panelTok; leaveCmp(); cmpBar();
+  setMarker(lat, lon);
+  $('panel').innerHTML = '<p class="loading">불러오는 중…</p>';
+  await loadDongs(); await loadHouse();
+  const d = dongAt(lat, lon);
+  if(tok !== panelTok) return;
+  $('panel').innerHTML = '<div class="label">' + (d ? esc(d.gu) + ' · ' + esc(d.name) : '고른 위치') + '</div><h1>' + esc(title || addr || '이 집으로 외국인 민박') + '</h1>' +
+    '<div id="reg"><p class="loading">건물 정보로 등록 가능 여부 보는 중…</p></div>' +
+    (d ? '<div class="kpis">' +
+      '<div><small>숙박 객실당 밤 외국인</small><b>' + (d.per_room != null ? d.per_room.toFixed(1) + '명' : '—') + '</b><small>' + (d.pct != null ? '서울 상위 ' + Math.max(1, Math.round((1 - d.pct) * 100)) + '%' : '밤 외국인 100명 미만') + '</small></div>' +
+      '<div><small>투룸급 집 월세</small><b>' + man(d.rent2) + '</b><small>' + (d.rent_pct != null ? '서울 행정동 ' + (d.rent_pct >= .5 ? '상위 ' + Math.max(1, Math.round((1 - d.rent_pct) * 100)) : '하위 ' + Math.max(1, Math.round(d.rent_pct * 100))) + '%' : '계약 적음') + '</small></div></div>' +
+      '<p><button type="button" class="btn-go" id="toDong">' + esc(d.name) + ' 민박 분석 전체 보기</button></p>' : '') +
+    sec('h.land', '땅·건물', '<div id="land"><p class="loading">브이월드에서 불러오는 중…</p></div>', true) +
+    sec('p.st', '주변 외국인 민박', '<div id="st"></div>', true, true) + STAY_FOOT();
+  if(d) $('toDong').onclick = () => showDong(d.cd);
+  toPanel(); fillStay(tok, lat, lon, 300);
+  const L = await landInfo(lat, lon, addr).catch(() => null);
+  if(tok !== panelTok) return;
+  $('reg').innerHTML = regHtml(L);
+  $('land').innerHTML = landHtml(L);
+}
 // ---------- 집 월세(국토교통부 주택 전월세 실거래, 법정동 → 행정동 비중으로 묶음)
 // 행정동 값 = 걸쳐 있는 법정동들의 중앙값을 (계약 수 × 비중)으로 가중 평균한 근사치
 let HOUSE_ON = false;
@@ -1597,6 +1645,7 @@ document.querySelectorAll('#yrs button').forEach(b => b.addEventListener('click'
     else if(link && link.k === 'a' && AREAS.some(x => x.code === link.id)){ await showHome(); await showArea(link.id); }
     else if(link && link.k === 'b'){ await showHome(); await showBuilding(link.id); }
     else if(link && link.k === 'd'){ await setMode('stay', true); await showDong(link.id); }
+    else if(link && link.k === 'h' && /^[\d.]+,[\d.]+$/.test(link.id)){ const [la, lo] = link.id.split(',').map(Number); await setMode('stay', true); fly(la, lo, 18); await showHouse(la, lo); }
     else await showHome();
   } catch(err){
     $('panel').innerHTML = '<p>데이터를 불러오지 못했습니다('+esc(err.message)+'). 잠시 뒤 새로고침해 주세요.</p>';
