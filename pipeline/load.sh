@@ -5,6 +5,7 @@
 # 필요: psql, 환경변수 JARI_DB_PASSWORD (로컬은 db.sh가 .secrets에서 읽음)
 set -euo pipefail
 cd "$(dirname "$0")/.."
+python -I pipeline/check_out.py   # 칸 어긋남·화면에 없는 업종이면 여기서 멈춤(DB는 건드리지 않음)
 META=$(cat data/out/meta.json)
 T=data/tmp; mkdir -p $T
 size(){ bash ./db.sh -tAc "select pg_size_pretty(pg_database_size('postgres'))"; }

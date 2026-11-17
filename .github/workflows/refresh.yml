@@ -10,6 +10,8 @@ on:
         required: false
         default: ""
 concurrency: refresh-data
+permissions:
+  contents: write   # 정적 페이지(docs/a, docs/g) 커밋
 jobs:
   refresh:
     runs-on: ubuntu-latest
@@ -39,3 +41,20 @@ jobs:
           HAVE=$(bash ./db.sh -tAc "select distinct q from area_q" | tr '\n' ' ')
           python -I pipeline/fetch_trend.py $HAVE
           bash pipeline/load_trend.sh
+      - name: Academy (서울시 학원·교습소, 사라진 곳은 폐원 기록)
+        env:
+          JARI_DB_PASSWORD: ${{ secrets.JARI_DB_PASSWORD }}
+          SEOUL_API_KEY: ${{ secrets.SEOUL_API_KEY }}
+          VWORLD_KEY: ${{ secrets.VWORLD_KEY }}
+          PSQL: psql
+        run: bash pipeline/load_academy.sh
+      - name: Pages (상권·구 정적 페이지, sitemap)
+        env:
+          JARI_DB_PASSWORD: ${{ secrets.JARI_DB_PASSWORD }}
+          PSQL: psql
+        run: |
+          bash pipeline/build_pages.sh
+          git config user.name "jari-bot"
+          git config user.email "jari-bot@users.noreply.github.com"
+          git add docs/a docs/g docs/list.html docs/sitemap.xml docs/p.css
+          git diff --cached --quiet || { git commit -m "정적 페이지 갱신 $(date -u +%F)"; git push; }

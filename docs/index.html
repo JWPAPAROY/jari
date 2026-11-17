@@ -810,6 +810,7 @@ function cmpRows(){
 }
 let cmpTok = 0;
 async function showCompare(){
+  track('compare');
   state.sel = {kind:'cmp'}; const tok = ++panelTok; cmpBar();
   if(marker){ marker.remove(); marker = null; }
   $('panel').innerHTML = '<p class="loading">'+CMP.length+'곳을 비교하는 중… (땅값·상권 자료까지 불러와 몇 초 걸립니다)</p>';
@@ -893,9 +894,42 @@ async function showHome(){
 }
 
 // ---------- 상권
+// ---------- 방문 통계(쿠키 없음, 횟수만) · 주소창 링크(#a=상권, #b=건물, &s=업종)
+const SRC = (() => { const r = document.referrer; if(!r) return 'direct';
+  try{ const h = new URL(r).hostname; if(h === location.hostname) return 'internal';
+    for(const k of ['google','naver','daum','bing']) if(h.includes(k)) return k; return 'other'; }catch(e){ return 'other'; } })();
+const SENT = new Set();
+function track(evt){   // 한 번 방문에 행동 종류별로 한 번만 센다
+  if(SENT.has(evt)) return; SENT.add(evt);
+  fetch(SB + '/rest/v1/rpc/hit', {method:'POST', headers:{...H, 'Content-Type':'application/json'},
+    body: JSON.stringify({p_page:'map', p_src:SRC, p_evt:evt}), keepalive:true}).catch(() => {});
+}
+function setLink(k, id){
+  try{ history.replaceState(null, '', location.pathname + (k ? '#' + k + '=' + encodeURIComponent(id) + (state.svc !== '전체' ? '&s=' + encodeURIComponent(state.svc) : '') : '')); }catch(e){}
+}
+function readLink(){
+  const m = decodeURIComponent(location.hash || '').match(/^#([ab])=([^&]+)(?:&s=(.+))?$/);
+  return m ? {k:m[1], id:m[2], s:m[3] || null} : null;
+}
+// ---------- 학원·교습소(서울시 자료: 지금 등록된 곳만, 폐원은 매주 비교로 기록 중)
+async function fillAcademy(tok, args, jkey, where){
+  const [st, list] = await Promise.all([
+    rpc('academy_stats', args).catch(() => null),
+    jkey ? rest('academy?select=name,kind,field,reg_date&closed_on=is.null&jkey=eq.' + encodeURIComponent(jkey) + '&order=reg_date.desc&limit=50').catch(() => []) : Promise.resolve([])
+  ]);
+  const el = $('ac'); if(tok !== panelTok || !el || !st || (!st.open && !list.length)) return;
+  const f = (st.fields || []).slice(0, 6).map(x => esc(x.field) + ' <b class="num">' + x.n + '</b>').join(' · ');
+  el.innerHTML = '<h2>학원·교습소 <span class="note">· ' + esc(where) + '</span></h2>' +
+    '<p style="margin:0">지금 <b class="num">' + fmt(st.open) + '곳</b> <span class="note">(학원 ' + fmt(st.hakwon) + ' · 교습소 ' + fmt(st.gyoseupso) + ') · 최근 1년 새로 등록 ' + fmt(st.new_1y) + '곳' +
+      (st.closed ? ' · ' + esc(ym(st.since)) + ' 이후 폐원 ' + fmt(st.closed) + '곳' : '') + '</span></p>' +
+    (f ? '<p class="note" style="margin:4px 0 0">' + f + '</p>' : '') +
+    (list.length ? '<div class="tblwrap" style="margin-top:8px"><table><thead><tr><th>이 건물 학원·교습소</th><th>분야</th><th>등록</th></tr></thead><tbody>' +
+      list.map(x => '<tr><td>' + esc(x.name) + '<br><span class="note">' + esc(x.kind) + '</span></td><td class="note">' + esc(x.field || '') + '</td><td class="num">' + esc(ym(x.reg_date)) + '</td></tr>').join('') +
+      '</tbody></table></div>' : '');
+}
 function leaveCmp(){ cmpLayer.clearLayers(); if(location.hash.startsWith('#cmp=')) try{ history.replaceState(null, '', location.pathname); }catch(e){} }
 async function showArea(code){
-  state.sel = {kind:'area', code}; const tok = ++panelTok; leaveCmp(); cmpBar();
+  state.sel = {kind:'area', code}; const tok = ++panelTok; leaveCmp(); cmpBar(); setLink('a', code); track('area');
   const a = AREAS.find(x => x.code === code); if(!a) return;
   $('panel').innerHTML = '<p class="loading">불러오는 중…</p>';
   const rows = await rest('area_stats?select=*&code=eq.' + code);
@@ -907,9 +941,10 @@ async function showArea(code){
     survBlock(all, '이 상권 전체') + '<div id="tk"></div>' +
     (best ? '<p class="note" style="margin-top:10px">이 상권에서 3년을 가장 잘 버틴 업종은 <b>'+esc(best.svc)+'</b>('+pct(best.s3,best.o3)+', '+best.o3+'곳 중)입니다.</p>' : '') +
     '<div id="tr"><p class="loading">매출·유동인구 흐름 불러오는 중…</p></div>' +
-    '<h2>업종별 생존율</h2>' + svcTable(rows, 10) + '<div id="dt"><p class="loading">조건별 통계 불러오는 중…</p></div>' + FOOT;
+    '<h2>업종별 생존율</h2>' + svcTable(rows, 10) + '<div id="dt"><p class="loading">조건별 통계 불러오는 중…</p></div><div id="ac"></div>' + FOOT;
   if(a.lat) map.flyTo([a.lat, a.lon], Math.max(map.getZoom(), 15), {duration:.6});
   toPanel();
+  fillAcademy(tok, {p_lat:0, p_lon:0, p_r:0, p_area:code}, null, '이 상권');
   const sv = trendSvc();
   const [d, tr] = await Promise.all([
     rpc('place_detail', {p_lat:0, p_lon:0, p_r:0, p_svc:state.svc, p_area:code}).catch(() => null),
@@ -927,7 +962,7 @@ async function showArea(code){
 
 // ---------- 건물
 async function showBuilding(jkey){
-  state.sel = {kind:'building', jkey}; const tok = ++panelTok; leaveCmp(); cmpBar();
+  state.sel = {kind:'building', jkey}; const tok = ++panelTok; leaveCmp(); cmpBar(); setLink('b', jkey); track('building');
   $('panel').innerHTML = '<p class="loading">불러오는 중…</p>';
   const [b] = await rest('building?select=*&jkey=eq.' + encodeURIComponent(jkey));
   if(tok !== panelTok) return;
@@ -958,18 +993,19 @@ async function showBuilding(jkey){
       cmp('이 건물', b) + cmp('반경 300m', nearAll) + (area[0] ? cmp('상권 전체', area[0]) : '') + '</tbody></table></div>' +
     '<h2>땅·건물</h2><div id="land"><p class="loading">브이월드에서 불러오는 중…</p></div>' +
     '<div id="dt"><p class="loading">조건별 통계 불러오는 중…</p></div>' +
-    '<h2>이 근처(300m)에서 오래 버틴 업종</h2>' + svcTable(near, 10) +
+    '<h2>이 근처(300m)에서 오래 버틴 업종</h2>' + svcTable(near, 10) + '<div id="ac"></div>' +
     '<h2>이 건물을 거쳐 간 가게</h2>' +
     '<p class="note" style="margin:0 0 6px">2016년 이후 개업 <b>'+since.length+'</b> · 폐업 <b>'+turn.closes+'</b>' +
       (turn.lifeMed != null ? ' · 문 닫은 가게 영업 기간 중앙값 <b>'+(turn.lifeMed/365).toFixed(1)+'년</b>' : '') +
       (turn.gapMed != null && b.n_open <= 3 ? ' · 다음 가게까지 중앙값 <b>'+gapTxt(turn.gapMed)+'</b>' : '') +
-      '<br>인허가가 필요한 가게만 셉니다(일반 옷가게·학원 등은 없음). 같은 건물 안 다른 호실일 수 있습니다.</p>' +
+      '<br>인허가가 필요한 가게만 셉니다(일반 옷가게 등은 없음, 학원은 위에 따로). 같은 건물 안 다른 호실일 수 있습니다.</p>' +
     '<div class="tblwrap"><table><thead><tr><th>상호</th><th class="col-bar">업종</th><th>개업</th><th>폐업</th><th class="r">영업</th></tr></thead><tbody>' +
       hist.map(x => '<tr><td>'+esc(x.name)+'<br><span class="note">'+esc(x.floor||'')+(x.size_m2 ? ' · '+Math.round(x.size_m2/3.3058)+'평' : '')+'<span class="m-only"> · '+esc(x.svc || x.biz_type || '')+'</span></span></td><td class="note col-bar">'+esc(x.svc || x.biz_type || '')+'</td><td class="num">'+ym(x.open_date)+'</td><td class="num">'+(ym(x.close_date) || '—')+'</td><td class="r">'+lifeTag(x)+'</td></tr>').join('') +
     '</tbody></table></div>' + FOOT;
   setMarker(b.lat, b.lon);
   map.flyTo([b.lat, b.lon], Math.max(map.getZoom(), 17), {duration:.6});
   toPanel();
+  fillAcademy(tok, {p_lat:b.lat, p_lon:b.lon, p_r:300}, jkey, '반경 300m');
   const [L, d] = await Promise.all([landP, detP]);
   if(tok !== panelTok) return;
   $('land').innerHTML = landHtml(L);
@@ -979,6 +1015,7 @@ async function showBuilding(jkey){
 
 // ---------- 지도 아무 데나 누르거나 주소를 고르면: 반경 통계 + 땅 정보
 async function showPoint(lat, lon, title, addr){
+  track('point'); setLink(null);
   state.sel = {kind:'point', lat, lon, title, addr}; const tok = ++panelTok; leaveCmp(); cmpBar();
   setMarker(lat, lon);
   $('panel').innerHTML = '<p class="loading">불러오는 중…</p>';
@@ -991,8 +1028,9 @@ async function showPoint(lat, lon, title, addr){
     '<div id="tk"><p class="loading">땅값·주변 흐름 분석 중…</p></div>' +
     '<h2>땅·건물</h2><div id="land"><p class="loading">브이월드에서 불러오는 중…</p></div>' +
     '<div id="dt"><p class="loading">조건별 통계 불러오는 중…</p></div>' +
-    '<h2>업종별 생존율</h2>' + svcTable(near, 10) + '<p class="note">점(건물)을 누르면 그 건물의 이력을 볼 수 있습니다.</p>' + FOOT;
+    '<h2>업종별 생존율</h2>' + svcTable(near, 10) + '<p class="note">점(건물)을 누르면 그 건물의 이력을 볼 수 있습니다.</p><div id="ac"></div>' + FOOT;
   toPanel();
+  fillAcademy(tok, {p_lat:lat, p_lon:lon, p_r:300}, null, '반경 300m');
   const [L, d] = await Promise.all([landP, detP]);
   if(tok !== panelTok) return;
   $('land').innerHTML = landHtml(L);
@@ -1028,6 +1066,7 @@ function renderHits(hits){
   box.hidden = false;
 }
 async function doSearch(q, pickFirst){
+  track('search');
   q = q.trim(); if(q.length < 2){ $('results').hidden = true; return; }
   const tok = ++sTok;
   const vwP = vwSearch(q);
@@ -1064,10 +1103,12 @@ function reshow(){
   if(s.kind === 'area') showArea(s.code); else if(s.kind === 'building') showBuilding(s.jkey); else if(s.kind === 'point') showPoint(s.lat, s.lon, s.title, s.addr);
 }
 $('svc').addEventListener('change', async e => {
+  track('svc');
   state.svc = e.target.value; await (state.mode === 'trend' ? loadTrend() : loadStats()); drawAreas(); drawLegend();
   if(state.sel) reshow(); else if(state.mode === 'trend') showTrendHome();
 });
 document.querySelectorAll('#mode button').forEach(b => b.addEventListener('click', async () => {
+  if(b.dataset.m === 'trend') track('trend');
   state.mode = b.dataset.m;
   document.querySelectorAll('#mode button').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
   $('yrs').style.display = state.mode === 'trend' ? 'none' : '';
@@ -1082,12 +1123,18 @@ document.querySelectorAll('#yrs button').forEach(b => b.addEventListener('click'
 }));
 
 (async () => {
+  track('view');
+  const link = readLink();
+  if(link && link.s && [...$('svc').options].some(o => o.value === link.s)){ state.svc = link.s; $('svc').value = link.s; }
   drawLegend();
   try{
     await Promise.all([loadAreas(), loadStats()]);
     drawAreas();
     const fromLink = cmpLoad(); cmpBar();
-    if(fromLink && CMP.length >= 2) await showCompare(); else await showHome();
+    if(fromLink && CMP.length >= 2) await showCompare();
+    else if(link && link.k === 'a' && AREAS.some(x => x.code === link.id)){ await showHome(); await showArea(link.id); }
+    else if(link && link.k === 'b'){ await showHome(); await showBuilding(link.id); }
+    else await showHome();
   } catch(err){
     $('panel').innerHTML = '<p>데이터를 불러오지 못했습니다('+esc(err.message)+'). 잠시 뒤 새로고침해 주세요.</p>';
   }
