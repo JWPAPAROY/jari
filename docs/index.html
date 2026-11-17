@@ -357,8 +357,10 @@ async function loadStats(){
 }
 let TREND = new Map(), trendFor = null;
 const FOOD_SVC = new Set(['한식','커피·음료','호프·주점','분식','양식','일식','중식','치킨','제과','패스트푸드']);
-const trendLab = () => FOOD_SVC.has(state.svc) ? state.svc : state.svc === '전체' || state.svc === '기타' ? '음식점·카페' : '음식점·카페(' + state.svc + ' 매출 자료는 없음)';
-const trendSvc = () => FOOD_SVC.has(state.svc) ? state.svc : '전체';   // 서울시 매출 자료는 외식 10개 업종뿐('전체'=외식 합)
+const TREND_SVC = new Set([...FOOD_SVC, '의원','치과','한의원','미용실','네일','피부관리','세탁소','노래방','PC방','당구장','헬스장','체육도장','슈퍼마켓','편의점','안경점','약국']);
+const TREND_AS = {'헬스장':'스포츠클럽', '약국':'의약품 판매', '체육도장':'스포츠 강습'};   // 서울시 매출 업종 중 가장 가까운 것
+const trendLab = () => TREND_SVC.has(state.svc) ? state.svc + (TREND_AS[state.svc] ? '(매출은 '+TREND_AS[state.svc]+' 기준)' : '') : state.svc === '전체' || state.svc === '기타' ? '음식점·카페' : '음식점·카페(' + state.svc + ' 매출 자료는 없음)';
+const trendSvc = () => TREND_SVC.has(state.svc) ? state.svc : '전체';   // 서울시 매출 업종에 있는 것만('전체'=외식 합)
 async function loadTrend(){
   const sv = trendSvc(); if(trendFor === sv) return;
   const rows = await rest('area_trend?select=code,score,grade,flag,sales_yoy,sales_3y,flpop_yoy,store_3y,n_now,n_3y,ix_nm&svc=eq.' + encodeURIComponent(sv), true);

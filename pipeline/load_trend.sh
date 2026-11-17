@@ -17,3 +17,4 @@ commit;
 SQL
 bash ./db.sh -q -f data/tmp/load_trend.sql
 bash ./db.sh -tAc "select 'area_q '||count(*) from area_q union all select 'area_sales '||count(*) from area_sales union all select 'area_trend '||count(*) from area_trend"
+bash ./db.sh -q -c "set statement_timeout = 0" -c "vacuum analyze area_q" -c "vacuum analyze area_sales" -c "vacuum analyze area_trend"

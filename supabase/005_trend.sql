@@ -62,9 +62,9 @@ create or replace function refresh_trend() returns void language sql security de
       count(*) filter (where lc.open_date <= current_date - 1095 and (lc.close_date is null or lc.close_date > current_date - 1095))::int n_3y,
       count(*) filter (where lc.stat and lc.open_date > current_date - 365)::int op_1y,
       count(*) filter (where lc.life_days is not null and lc.close_date > current_date - 365)::int cl_1y
-    from license lc cross join lateral (select lc.svc as svc union all select '전체') g
+    from license lc cross join lateral (select lc.svc as svc
+                                        union all select '전체' where lc.kind in ('음식점', '휴게', '제과점')) g   -- '전체'=외식 합(매출 '전체'와 맞춤)
     where lc.area_code is not null and lc.svc is not null
-      and lc.kind in ('음식점', '휴게', '제과점')   -- 매출 자료가 외식 업종뿐이라 가게 수도 외식만
     group by lc.area_code, g.svc
   ),
   j as (

@@ -1,6 +1,6 @@
 """서울시 상권분석서비스(OpenAPI) 분기 자료 → data/out/area_q.csv, area_sales.csv
 
-- 추정매출-상권(VwsmTrdarSelngQq): 외식업 10개 업종만 (jari 업종 이름으로 바꿈) + 모든 업종 합계(ALL)
+- 추정매출-상권(VwsmTrdarSelngQq): 외식 10개 + 생활서비스·소매 일부(OTHER) 업종 (jari 업종 이름으로 바꿈) + 모든 업종 합계(ALL)
 - 길단위인구(VwsmTrdarFlpopQq), 상주인구(VwsmTrdarRepopQq), 직장인구(VwsmTrdarWrcPopltnQq), 상권변화지표(VwsmTrdarIxQq)
 사용: SEOUL_API_KEY=... python -I pipeline/fetch_trend.py [이미 있는 분기 ...]
   인자로 받은 분기는 건너뜀(단, 가장 최근 2개 분기는 수정될 수 있어 항상 다시 받음).
@@ -13,6 +13,11 @@ OUT = 'data/out'
 FIRST = 20223                     # 3년 전 같은 4개 분기와 비교하려면 최근 16개 분기가 필요
 FOOD = {'CS100001': '한식', 'CS100002': '중식', 'CS100003': '일식', 'CS100004': '양식', 'CS100005': '제과',
         'CS100006': '패스트푸드', 'CS100007': '치킨', 'CS100008': '분식', 'CS100009': '호프·주점', 'CS100010': '커피·음료'}
+# 외식 밖 업종(매출만, '전체'=외식 합에는 안 넣음). 헬스장=스포츠클럽, 약국=의약품, 체육도장=스포츠 강습은 가장 가까운 업종
+OTHER = {'CS200006': '의원', 'CS200007': '치과', 'CS200008': '한의원', 'CS200028': '미용실', 'CS200029': '네일', 'CS200030': '피부관리',
+         'CS200031': '세탁소', 'CS200037': '노래방', 'CS200019': 'PC방', 'CS200016': '당구장', 'CS200024': '헬스장', 'CS200005': '체육도장',
+         'CS300001': '슈퍼마켓', 'CS300002': '편의점', 'CS300016': '안경점', 'CS300018': '약국',
+         'CS200001': '학원', 'CS200002': '학원', 'CS200003': '학원'}
 
 def call(svc, a, b, q, tries=5):
     url = f'http://openapi.seoul.go.kr:8088/{KEY}/json/{svc}/{a}/{b}/{q}'
@@ -75,6 +80,7 @@ if __name__ == '__main__':
             amt, cnt, yng = num(r, 'THSMON_SELNG_AMT'), num(r, 'THSMON_SELNG_CO'), num(r, 'AGRDE_20_SELNG_AMT') + num(r, 'AGRDE_30_SELNG_AMT')
             keys = ['ALL']
             if r['SVC_INDUTY_CD'] in FOOD: keys += [FOOD[r['SVC_INDUTY_CD']], '전체']
+            elif r['SVC_INDUTY_CD'] in OTHER: keys.append(OTHER[r['SVC_INDUTY_CD']])
             for k in keys:
                 a = agg[(r['TRDAR_CD'], k)]; a[0] += amt; a[1] += cnt; a[2] += yng
         for (code, svc), (amt, cnt, yng) in agg.items():
