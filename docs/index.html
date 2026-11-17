@@ -1050,7 +1050,7 @@ function readLink(){
 }
 // ---------- 임대료·공실률(한국부동산원 표본조사, 가까운 조사 상권 값)
 async function fillRent(tok, code){
-  const none = () => { kpSet(tok, 'rent', '—', '조사 상권과 멀어 자료 없음'); kpSet(tok, 'vac', '—', ''); };
+  const none = () => { kpSet(tok, 'rent', '—', '가까운 조사 상권 없음(1.5km 밖)'); kpSet(tok, 'vac', '—', ''); };
   if(!code) return none();
   const [ar] = await rest('area_rent?select=region,dist&code=eq.' + encodeURIComponent(code)).catch(() => []);
   if(tok !== panelTok) return;
