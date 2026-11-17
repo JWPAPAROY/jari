@@ -1511,6 +1511,54 @@ function regHtml(L){
   return '<div class="regbox reg-' + v.lv + '"><b class="' + cls + '">' + esc(v.t) + '</b>' + (v.s ? '<br><span class="note">' + esc(v.s) + '</span>' : '') +
     '<br><span class="note">건물 주용도·연면적으로 본 1차 판정 · 기준 ' + REG_SRC + '</span></div>';
 }
+// 건축물대장(건축HUB, 서버 RPC bld_ledger)으로 세부 판정: 층별 용도에서 주택 부분만 골라 면적·세부 유형을 본다
+const HOUSE_CD = {'01000':'단독주택','01001':'단독주택','01002':'다중주택','01003':'다가구주택','01004':'공관','02000':'공동주택','02001':'아파트','02002':'연립주택','02003':'다세대주택','02004':'기숙사'};
+function ledgerVerdict(g){
+  if(!g || g.err || !g.title || !g.title.length) return null;
+  const fl = (g.floors || []).filter(x => x.main && x.gb !== '옥탑');
+  const home = fl.filter(x => /^0[12]/.test(x.cd || ''));
+  const kinds = [...new Set(home.map(x => HOUSE_CD[x.cd] || x.nm))];
+  const tcd = g.title.map(x => x.cd || '');
+  const A = v => fmt(Math.round(v)) + '㎡';
+  if(!home.length){
+    if(!fl.length && tcd.some(c => /^0[12]/.test(c))) return null;   // 층별 정보가 없으면 대분류 판정으로
+    const isOffi = fl.some(x => /오피스텔/.test((x.nm || '') + (x.etc || '')));
+    return {lv:'bad', t: isOffi ? '오피스텔 — 등록 불가' : '주택으로 허가된 층이 없습니다', s: isOffi ? '건축물대장 층별 용도에 오피스텔이 있습니다.' : '층별 용도: ' + [...new Set(fl.map(x => x.nm))].slice(0, 4).join(', ') + '.'};
+  }
+  if(kinds.every(k => k === '다중주택' || k === '기숙사' || k === '공관'))
+    return {lv:'bad', t: kinds.join('·') + ' — 대상 주택 목록에 없습니다', s:'대상은 단독·다가구·아파트·연립·다세대입니다.'};
+  const homeA = home.reduce((s, x) => s + (x.area || 0), 0), mixed = home.length < fl.length;
+  const floorsTxt = home.map(x => (x.dong ? x.dong + ' ' : '') + x.flr).join(', ');
+  const oneroom = home.filter(x => /원룸|도시형생활/.test(x.etc || ''));
+  const orTxt = oneroom.length ? (oneroom.length === home.length ? '주택 층이 모두' : oneroom.map(x => x.flr).join(', ') + '이') + ' 원룸형·도시형생활주택으로 적혀 있습니다. 서울시 안내에 원룸은 등록 불가로 나와 있어 구청 확인이 꼭 필요합니다. ' : '';
+  if(home.some(x => /^02/.test(x.cd))){
+    const u = g.units;
+    const unitTxt = u && u.n ? '세대 전용면적 ' + (u.min === u.max ? A(u.min) : A(u.min) + '~' + A(u.max)) + '(' + fmt(u.n) + '세대)' : '';
+    return {lv: oneroom.length ? 'mid' : u && u.n && u.max < 230 ? 'good' : 'mid', t: kinds.filter(k => /아파트|연립|다세대/.test(k)).join('·') + ' — 대상 유형입니다' + (oneroom.length ? '(원룸형 확인 필요)' : ''),
+      s: orTxt + (unitTxt ? unitTxt + (u.max < 230 ? '로 모두 230㎡ 미만입니다. ' : '. ') : '') + '공동주택에서 230㎡를 세대로 보는지 건물 전체로 보는지는 안내에 없어 구청 확인이 필요합니다.'};
+  }
+  const ok = homeA < 230;
+  return {lv: ok ? 'good' : 'bad', t: ok ? kinds.join('·') + ', 주택 부분 ' + A(homeA) + ' — 230㎡ 미만' : kinds.join('·') + ', 주택 부분 ' + A(homeA) + ' — 230㎡ 미만 기준을 넘습니다',
+    s: (mixed ? '점포·사무실이 섞인 건물로, 주택은 ' + floorsTxt + '입니다. 주택 부분만 면적으로 셈하는지는 구청에 확인하세요. ' : '주택 층: ' + floorsTxt + '. ') +
+       (!ok && kinds.includes('다가구주택') ? '다가구에서 일부 층만 쓰는 경우 면적 산정도 구청 확인이 필요합니다.' : '')};
+}
+function ledgerFloors(g){
+  const fl = (g && g.floors || []).filter(x => x.main && x.gb !== '옥탑');
+  if(!fl.length) return '';
+  return '<div class="tblwrap"><table><thead><tr><th>층</th><th>용도(건축물대장)</th><th class="r">면적</th></tr></thead><tbody>' +
+    fl.map(x => '<tr' + (/^0[12]/.test(x.cd || '') ? '' : ' class="thin"') + '><td>' + esc((x.dong ? x.dong + ' ' : '') + x.flr) + '</td><td>' + esc(HOUSE_CD[x.cd] || x.nm || '') + (x.etc && x.etc !== x.nm ? ' <span class="note">' + esc(x.etc) + '</span>' : '') + '</td><td class="r num">' + fmt(Math.round(x.area || 0)) + '㎡</td></tr>').join('') +
+    '</tbody></table></div><p class="note">흐린 줄은 주택이 아닌 층입니다.</p>';
+}
+async function fillLedger(tok, L){
+  if(!L || !L.pnu) return;
+  const g = await rpc('bld_ledger', {p_pnu: L.pnu}).catch(() => null);
+  if(tok !== panelTok || !$('reg')) return;
+  const v = ledgerVerdict(g);
+  if(!v) return;
+  const cls = {good:'good', bad:'bad', mid:''}[v.lv];
+  $('reg').innerHTML = '<div class="regbox reg-' + v.lv + '"><b class="' + cls + '">' + esc(v.t) + '</b>' + (v.s ? '<br><span class="note">' + esc(v.s) + '</span>' : '') +
+    '<br><span class="note">건축물대장 층별 용도로 본 판정 · 기준 ' + REG_SRC + '</span></div>' + ledgerFloors(g);
+}
 async function showHouse(lat, lon, title, addr){
   track('house'); setLink('h', lat.toFixed(5) + ',' + lon.toFixed(5));
   state.sel = {kind:'house', lat, lon}; const tok = ++panelTok; leaveCmp(); cmpBar();
@@ -1533,6 +1581,7 @@ async function showHouse(lat, lon, title, addr){
   if(tok !== panelTok) return;
   $('reg').innerHTML = regHtml(L);
   $('land').innerHTML = landHtml(L);
+  fillLedger(tok, L);
 }
 // ---------- 집 월세(국토교통부 주택 전월세 실거래, 법정동 → 행정동 비중으로 묶음)
 // 행정동 값 = 걸쳐 있는 법정동들의 중앙값을 (계약 수 × 비중)으로 가중 평균한 근사치
