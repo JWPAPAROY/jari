@@ -1350,8 +1350,8 @@ function stayLegend(){
   const b = BINS[3], p = x => Math.round(x * 100);
   const rows = state.sm === 'surv'
     ? [['--c5', '≥' + p(b[3]) + '%'], ['--c4', p(b[2]) + '~' + p(b[3]) + '%'], ['--c3', p(b[1]) + '~' + p(b[2]) + '%'], ['--c2', p(b[0]) + '~' + p(b[1]) + '%'], ['--c1', '<' + p(b[0]) + '%'], ['--cna', '3년 지난 민박 15곳 미만']]
-    : [['--t5', state.sm === 'opp' ? '숙박 적음 (상위 20%)' : '많음 (상위 20%)'], ['--t4', ''], ['--t3', '중간'], ['--t2', ''], ['--t1', state.sm === 'opp' ? '숙박 많음 (하위 20%)' : '적음 (하위 20%)'], ['--cna', state.sm === 'supply' ? '민박 없음' : '밤 외국인 100명 미만']];
-  $('legend').innerHTML = '<b>' + esc(SM[state.sm].lab) + '</b> · 행정동<div class="rows">' + rows.map(([c, t]) => '<i style="background:' + css(c) + '"></i>' + t).join('<br>') +
+    : [['--t5', state.sm === 'opp' ? '외국인에 비해 숙소 적음' : '많음 (서울 상위 20%)'], ['--t4', ''], ['--t3', '중간'], ['--t2', ''], ['--t1', state.sm === 'opp' ? '외국인에 비해 숙소 많음' : '적음 (서울 하위 20%)'], ['--cna', state.sm === 'supply' ? '민박 없음' : '밤 외국인 100명 미만']];
+  $('legend').innerHTML = '<b>' + esc(SM[state.sm].lab) + '</b> · 행정동' + (state.sm === 'opp' ? '<br><span class="muted">밤 외국인 ÷ 숙박 객실(민박+호텔 등), 파랑 = 이 값 서울 상위 20%</span>' : '') + '<div class="rows">' + rows.map(([c, t]) => '<i style="background:' + css(c) + '"></i>' + t).join('<br>') +
     '<div class="dotkey"><b>점</b> <span class="muted">(크게 확대하면)</span><br><i class="dot" style="width:10px;height:10px;background:' + css('--accent') + '"></i>도시민박 <i class="dot" style="width:10px;height:10px;background:' + css('--mid') + '"></i>한옥체험<br><i class="dot" style="width:7px;height:7px;background:' + css('--risk') + ';opacity:.6"></i>최근 3년 안에 폐업 · 클수록 객실 많음</div></div>';
 }
 const spopTxt = () => STAY_META.spop_from ? STAY_META.spop_from.slice(0, 4) + '.' + STAY_META.spop_from.slice(4, 6) + '.' + STAY_META.spop_from.slice(6) + '~' + STAY_META.spop_to.slice(4, 6) + '.' + STAY_META.spop_to.slice(6) : '';
