@@ -44,7 +44,7 @@ create or replace function refresh_stats() returns void language sql security de
          count(*) filter (where l.stat and l.open_date >= '2016-01-01' and l.open_date <= current_date - 1095 and coalesce(l.life_days, 99999) >= 1095),
          max(l.open_date)
   from license l
-  where l.jkey is not null and l.lat is not null and (l.close_date is null or l.close_date >= '2016-01-01')
+  where l.jkey is not null and l.lat is not null and l.svc is not null and (l.close_date is null or l.close_date >= '2016-01-01')
   group by l.jkey;
 
   truncate area_stats;

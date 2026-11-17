@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>jari · 이 자리 몇 년 버텼나</title>
-<meta name="description" content="서울 음식점·카페 인허가 기록으로 본 건물·상권별 1·2·3년 생존율과 업종별 차이">
+<meta name="description" content="서울 음식점·카페·미용실·의원·편의점 등 가게 인허가 기록으로 본 건물·상권별 1·2·3년 생존율과 업종별 차이">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
@@ -175,8 +175,13 @@ tr.go{cursor:pointer} tr.go:hover td{background:var(--accent-soft)}
     <div class="seg" id="mode" role="group" aria-label="보기"><button type="button" data-m="surv" aria-pressed="true">생존율</button><button type="button" data-m="trend" aria-pressed="false">뜨는 상권</button></div>
     <select id="svc" aria-label="업종">
       <option value="전체">모든 업종</option>
-      <option>한식</option><option>커피·음료</option><option>호프·주점</option><option>분식</option><option>양식</option>
-      <option>일식</option><option>중식</option><option>치킨</option><option>제과</option><option>패스트푸드</option><option value="기타">기타(분류 어려움)</option>
+      <optgroup label="외식"><option>한식</option><option>커피·음료</option><option>호프·주점</option><option>분식</option><option>양식</option>
+      <option>일식</option><option>중식</option><option>치킨</option><option>제과</option><option>패스트푸드</option><option value="기타">외식 기타(분류 어려움)</option></optgroup>
+      <optgroup label="미용"><option>미용실</option><option>네일</option><option>피부관리</option><option>메이크업</option><option>이발소</option></optgroup>
+      <optgroup label="의료·건강"><option>의원</option><option>치과</option><option>한의원</option><option>약국</option><option>안경점</option></optgroup>
+      <optgroup label="소매"><option>편의점</option><option>슈퍼마켓</option><option>전자담배</option></optgroup>
+      <optgroup label="생활"><option>세탁소</option><option>빨래방</option><option>동물병원</option><option>반려동물미용</option></optgroup>
+      <optgroup label="여가·운동"><option>헬스장</option><option>체육도장</option><option>PC방</option><option>노래방</option><option>당구장</option></optgroup>
     </select>
     <div class="seg" id="yrs" role="group" aria-label="기준 기간">
       <button type="button" data-y="1" aria-pressed="false">1년</button>
@@ -331,7 +336,7 @@ function dotKey(trend){
 }
 function drawLegend(){
   if(state.mode === 'trend'){
-    $('legend').innerHTML = '<b>뜨는 상권</b> · '+esc(trendSvc() === '전체' ? '음식점·카페' : trendSvc())+'<div class="rows">' +
+    $('legend').innerHTML = '<b>뜨는 상권</b> · '+esc(trendLab())+'<div class="rows">' +
       [['--t5','뜨는 중 (상위 20%)'],['--t4',''],['--t3','보합'],['--t2',''],['--t1','식는 중 (하위 20%)'],['--cna','자료 부족 · 개업 거의 없음']]
       .map(([c,t]) => '<i style="background:'+css(c)+'"></i>'+t).join('<br>') + '<br><span class="note">매출 1년·유동인구 1년·가게 수 3년 변화</span>' + dotKey(true) + '</div>';
     return;
@@ -351,7 +356,9 @@ async function loadStats(){
   STATS = new Map(rows.map(r => [r.code, r]));
 }
 let TREND = new Map(), trendFor = null;
-const trendSvc = () => state.svc === '기타' ? '전체' : state.svc;   // '기타'는 서울시 매출 업종에 없음
+const FOOD_SVC = new Set(['한식','커피·음료','호프·주점','분식','양식','일식','중식','치킨','제과','패스트푸드']);
+const trendLab = () => FOOD_SVC.has(state.svc) ? state.svc : state.svc === '전체' || state.svc === '기타' ? '음식점·카페' : '음식점·카페(' + state.svc + ' 매출 자료는 없음)';
+const trendSvc = () => FOOD_SVC.has(state.svc) ? state.svc : '전체';   // 서울시 매출 자료는 외식 10개 업종뿐('전체'=외식 합)
 async function loadTrend(){
   const sv = trendSvc(); if(trendFor === sv) return;
   const rows = await rest('area_trend?select=code,score,grade,flag,sales_yoy,sales_3y,flpop_yoy,store_3y,n_now,n_3y,ix_nm&svc=eq.' + encodeURIComponent(sv), true);
@@ -422,7 +429,7 @@ function svcTable(rows, minO){
     .map(r => ({...r, r3: r.o3 ? r.s3/r.o3 : 0})).sort((a,b) => (b.o3>=minO) - (a.o3>=minO) || b.r3 - a.r3);
   if(!list.length) return '<p class="note">업종별로 나눌 만큼 기록이 없습니다.</p>';
   return '<div class="tblwrap"><table><thead><tr><th>업종</th><th class="r">1년</th><th class="r">2년</th><th class="r">3년</th><th class="col-bar" style="width:70px"></th><th class="r">3년 표본</th></tr></thead><tbody>' +
-    list.map(r => '<tr class="'+(r.o3 < minO ? 'thin' : '')+'"><td>'+esc(r.svc === '기타' ? '기타(분류 어려움)' : r.svc)+'</td><td class="r num">'+pct(r.s1,r.o1)+'</td><td class="r num">'+pct(r.s2,r.o2)+'</td><td class="r num"><b>'+pct(r.s3,r.o3)+'</b></td>'+
+    list.map(r => '<tr class="'+(r.o3 < minO ? 'thin' : '')+'"><td>'+esc(r.svc === '기타' ? '외식 기타(분류 어려움)' : r.svc)+'</td><td class="r num">'+pct(r.s1,r.o1)+'</td><td class="r num">'+pct(r.s2,r.o2)+'</td><td class="r num"><b>'+pct(r.s3,r.o3)+'</b></td>'+
       '<td class="col-bar"><div class="bar"><i style="width:'+(r.r3*100).toFixed(0)+'%;background:'+color3(r.r3)+'"></i></div></td><td class="r num note">'+fmt(r.o3)+'</td></tr>').join('') +
     '</tbody></table></div><p class="note">흐린 줄은 3년 관찰 가게가 '+minO+'곳 미만이라 참고만 하세요.</p>';
 }
@@ -433,7 +440,7 @@ function lifeTag(x){
   return '<span class="tag '+(d < 1095 ? 'dead' : 'old')+'">'+t+'</span>';
 }
 const ym = d => d ? d.slice(0,7).replace('-','.') : '';
-const FOOT = '<footer class="foot"><p><b>생존율</b> 2016년 이후 문을 연 음식점·카페 중, 개업 후 1·2·3년이 지난 가게가 그 시점에 아직 영업 중이었던 비율. 같은 자리·같은 상호가 60일 안에 다시 인허가를 받으면 명의변경으로 보고 영업이 이어진 것으로 셌습니다.</p><p><b>자료</b> 행정안전부 LOCALDATA 일반·휴게음식점 인허가, 서울시 상권분석서비스 상권 영역. 매주 월요일 갱신. 개별 가게의 앞날을 예측하지 않습니다. 같은 조건에서도 결과는 운영에 따라 크게 갈립니다.</p><p><a href="table.html">조건별 폐업률 표(송파·마포 시제품)</a></p></footer>';
+const FOOT = '<footer class="foot"><p><b>생존율</b> 2016년 이후 문을 연 가게 중, 개업 후 1·2·3년이 지난 가게가 그 시점에 아직 영업 중이었던 비율. 같은 자리·같은 상호가 60일 안에 다시 인허가를 받으면 명의변경으로 보고 영업이 이어진 것으로 셌습니다.</p><p><b>자료</b> 행정안전부 LOCALDATA 인허가(일반·휴게음식점, 제과점, 미용·이용, 세탁, 의원, 약국, 안경, 동물병원·동물미용, 노래연습장, PC방, 당구장, 체력단련장, 체육도장, 담배소매), 서울시 상권분석서비스 상권 영역·추정매출. 편의점·슈퍼마켓·전자담배는 담배소매 인허가 상호로 가려낸 것이라 담배를 팔지 않는 가게는 빠집니다. 서울시 상권분석서비스 상권 영역. 매주 월요일 갱신. 개별 가게의 앞날을 예측하지 않습니다. 같은 조건에서도 결과는 운영에 따라 크게 갈립니다.</p><p><a href="table.html">조건별 폐업률 표(송파·마포 시제품)</a></p></footer>';
 
 function setMarker(lat, lon){ if(marker) marker.remove(); marker = L.circleMarker([lat,lon], {radius:10, color:css('--accent'), weight:3, fill:false}).addTo(map); }
 
@@ -559,7 +566,7 @@ function landHtml(L){
 }
 
 // ---------- 상세 통계 (DB place_detail): 층·면적·체인별 생존, 연도별 개업·폐업, 지금 영업 중
-const SVC_LABEL = () => state.svc === '전체' ? '모든 업종' : state.svc === '기타' ? '기타(분류 어려움)' : state.svc;
+const SVC_LABEL = () => state.svc === '전체' ? '모든 업종' : state.svc === '기타' ? '외식 기타(분류 어려움)' : state.svc;
 const G_NAME = {floor:'층', size:'면적', chain:'운영'};
 function detailHtml(d, where){
   if(!d) return '';
@@ -591,7 +598,7 @@ function detailHtml(d, where){
   const on = d.open_now || [], tot = on.reduce((s,x) => s + x.n, 0);
   if(tot){
     if(state.svc === '전체') h += '<h2>지금 영업 중인 가게 '+fmt(tot)+'곳</h2><p class="note" style="margin:0">' + on.slice(0,7).map(x => esc(x.svc === '기타' ? '기타' : x.svc)+' <b class="num">'+x.n+'</b>').join(' · ') + '</p>';
-    else { const m = on.find(x => x.svc === state.svc); h += '<h2>지금 영업 중인 '+esc(SVC_LABEL())+'</h2><p style="margin:0"><b class="num">'+(m ? m.n : 0)+'곳</b> <span class="note">· 음식점·카페 '+fmt(tot)+'곳 중 '+Math.round(100*(m ? m.n : 0)/tot)+'%</span></p>'; }
+    else { const m = on.find(x => x.svc === state.svc); h += '<h2>지금 영업 중인 '+esc(SVC_LABEL())+'</h2><p style="margin:0"><b class="num">'+(m ? m.n : 0)+'곳</b> <span class="note">· 모든 업종 '+fmt(tot)+'곳 중 '+Math.round(100*(m ? m.n : 0)/tot)+'%</span></p>'; }
   }
   return h;
 }
@@ -617,7 +624,7 @@ function trendHtml(tr, sv){
   if(!tr || !tr.t) return '<h2>상권 흐름</h2><p class="note">서울시 상권분석서비스 매출·유동인구 자료가 없는 상권입니다.</p>';
   const t = tr.t, sh = (a,b) => a && b ? a/b : null;
   const y1 = sh(t.y_now, t.s_now), y0 = sh(t.y_prev, t.s_prev);
-  let h = '<h2>상권 흐름 <span class="note">· '+esc(sv === '전체' ? '음식점·카페' : sv)+' · '+qlab(t.q_last)+'까지</span></h2>';
+  let h = '<h2>상권 흐름 <span class="note">· '+esc(trendLab())+' · '+qlab(t.q_last)+'까지</span></h2>';
   h += '<p style="margin:0">' + (t.grade ? '<span class="grade" style="background:'+css(GRADE_C[t.grade])+'">'+esc(t.grade)+'</span> ' : '') +
        (t.score != null ? '<span class="note">서울 상권 중 상위 '+Math.max(1, Math.round((1 - t.score) * 100))+'%</span> ' : '<span class="note">비교할 자료가 부족합니다</span> ') +
        (t.flag ? '<span class="flagchip">'+esc(t.flag)+'</span>' : '') + '</p>';
@@ -665,11 +672,11 @@ function takeaways({bld, near, d, L, turn, where, tr}){
     }
     if(state.svc !== '전체'){
       const on = d.open_now || [], tot = on.reduce((s,x) => s + x.n, 0), m = on.find(x => x.svc === state.svc);
-      if(tot >= 20) out.push('지금 '+esc(where)+'에 '+esc(SVC_LABEL())+' <b>'+(m ? m.n : 0)+'곳</b>이 영업 중입니다(음식점·카페의 '+Math.round(100*(m ? m.n : 0)/tot)+'%).');
+      if(tot >= 20) out.push('지금 '+esc(where)+'에 '+esc(SVC_LABEL())+' <b>'+(m ? m.n : 0)+'곳</b>이 영업 중입니다(모든 업종의 '+Math.round(100*(m ? m.n : 0)/tot)+'%).');
     }
   }
   if(turn && turn.closes >= 2 && turn.gapMed != null && !(bld && bld.n_open > 3))
-    out.push('이 건물에서 가게가 문을 닫은 뒤 다음 음식점·카페가 들어오기까지 <b>중앙값 '+(turn.gapMed < 60 ? Math.round(turn.gapMed)+'일' : (turn.gapMed/30.4).toFixed(0)+'개월')+'</b> 걸렸습니다'+(turn.unfilled ? ' (그 뒤로 아직 음식점이 안 들어온 경우 '+turn.unfilled+'번)' : '')+'.');
+    out.push('이 건물에서 가게가 문을 닫은 뒤 다음 가게가 들어오기까지 <b>중앙값 '+(turn.gapMed < 60 ? Math.round(turn.gapMed)+'일' : (turn.gapMed/30.4).toFixed(0)+'개월')+'</b> 걸렸습니다'+(turn.unfilled ? ' (그 뒤로 아직 가게가 안 들어온 경우 '+turn.unfilled+'번)' : '')+'.');
   const s = landStats(L);
   if(s.top != null) out.push('공시지가가 반경 150m 대지 중 <b>상위 '+s.top+'%</b>입니다' + (s.top <= 25 ? '. 주변보다 임대료가 높을 가능성이 큽니다.' : s.top >= 75 ? '. 주변보다 땅값이 낮은 편입니다.' : '.'));
   if(s.ch5 != null) out.push('땅값(공시지가)은 5년 동안 <b>'+(s.ch5 >= 0 ? '+' : '')+Math.round(s.ch5*100)+'%</b> 움직였습니다.');
@@ -771,7 +778,7 @@ function cmpRows(){
     ['상권 가게 수 3년 변화', 0, o => o.tr ? {txt: sgn(o.tr.store_3y), val: o.tr.store_3y, sub: fmt(o.tr.n_3y) + ' → ' + fmt(o.tr.n_now) + '곳'} : {txt:'—', val:null}],
     ['상권변화지표', 0, o => ({txt: o.tr && o.tr.ix_nm ? esc(o.tr.ix_nm) : '—', val:null})],
     ['경쟁 (반경 300m)'],
-    [state.svc === '전체' ? '영업 중 음식점·카페' : '영업 중 '+svl, 0, o => {
+    [state.svc === '전체' ? '영업 중 가게' : '영업 중 '+svl, 0, o => {
       const on = (o.det && o.det.open_now) || [], tot = on.reduce((a, x) => a + x.n, 0), m = state.svc === '전체' ? tot : ((on.find(x => x.svc === state.svc) || {}).n || 0);
       return {txt: fmt(m) + '곳', val: m, sub: state.svc === '전체' ? '' : '전체 ' + fmt(tot) + '곳의 ' + (tot ? Math.round(100*m/tot) : 0) + '%'};
     }],
@@ -855,7 +862,7 @@ async function showTrendHome(){
   const up = all.filter(t => t.flag !== '개업 거의 없음').sort((a,b) => b.score - a.score).slice(0, 15);
   const down = all.sort((a,b) => a.score - b.score).slice(0, 10);
   const nFlag = [...TREND.values()].filter(t => t.flag === '개업 거의 없음').length;
-  $('panel').innerHTML = '<h1>어디가 뜨고 있나</h1><p class="sub">'+esc(trendSvc() === '전체' ? '음식점·카페' : trendSvc())+' 기준 · 최근 4개 분기를 1년 전과 비교 · 지도 색과 같습니다</p>' +
+  $('panel').innerHTML = '<h1>어디가 뜨고 있나</h1><p class="sub">'+esc(trendLab())+' 기준 · 최근 4개 분기를 1년 전과 비교 · 지도 색과 같습니다</p>' +
     '<div class="panel-ctl seg" role="group" aria-label="상권 유형">' + KINDS.map(k => '<button type="button" data-k="'+k+'" aria-pressed="'+(k === homeKind)+'">'+(k === '전체' ? '모든 유형' : k)+'</button>').join('') + '</div>' +
     '<h2>뜨는 상권</h2>' + TREND_HEAD + up.map(trendRow).join('') + '</tbody></table></div>' +
     '<h2>식는 상권</h2>' + TREND_HEAD + down.map(trendRow).join('') + '</tbody></table></div>' +
@@ -868,7 +875,7 @@ async function showHome(){
   if(state.mode === 'trend') return showTrendHome();
   const rows = await rpc('seoul_stats', {});
   const all = rows.find(r => r.svc === '전체') || {};
-  $('panel').innerHTML = '<h1>서울 음식점·카페, 몇 년 버텼나</h1><p class="sub">2016년 이후 문을 연 가게 기준 · 주소나 상권을 검색하거나 지도를 눌러 보세요</p>' +
+  $('panel').innerHTML = '<h1>서울 가게들, 몇 년 버텼나</h1><p class="sub">2016년 이후 문을 연 가게 기준 · 주소나 상권을 검색하거나 지도를 눌러 보세요</p>' +
     survBlock(all, '') +
     '<div class="hint">' + ['망원동 415','연남동','송리단길','성수동2가','을지로3가'].map(t => '<button type="button" data-q="'+t+'">'+t+'</button>').join('') + '</div>' +
     '<h2>업종별로 보면</h2>' + svcTable(rows, 100) + FOOT;
@@ -946,7 +953,7 @@ async function showBuilding(jkey){
     '<p class="note" style="margin:0 0 6px">2016년 이후 개업 <b>'+since.length+'</b> · 폐업 <b>'+turn.closes+'</b>' +
       (turn.lifeMed != null ? ' · 문 닫은 가게 영업 기간 중앙값 <b>'+(turn.lifeMed/365).toFixed(1)+'년</b>' : '') +
       (turn.gapMed != null && b.n_open <= 3 ? ' · 다음 가게까지 중앙값 <b>'+gapTxt(turn.gapMed)+'</b>' : '') +
-      '<br>음식점·카페만 셉니다. 같은 건물 안 다른 호실일 수 있습니다.</p>' +
+      '<br>인허가가 필요한 가게만 셉니다(일반 옷가게·학원 등은 없음). 같은 건물 안 다른 호실일 수 있습니다.</p>' +
     '<div class="tblwrap"><table><thead><tr><th>상호</th><th class="col-bar">업종</th><th>개업</th><th>폐업</th><th class="r">영업</th></tr></thead><tbody>' +
       hist.map(x => '<tr><td>'+esc(x.name)+'<br><span class="note">'+esc(x.floor||'')+(x.size_m2 ? ' · '+Math.round(x.size_m2/3.3058)+'평' : '')+'<span class="m-only"> · '+esc(x.svc || x.biz_type || '')+'</span></span></td><td class="note col-bar">'+esc(x.svc || x.biz_type || '')+'</td><td class="num">'+ym(x.open_date)+'</td><td class="num">'+(ym(x.close_date) || '—')+'</td><td class="r">'+lifeTag(x)+'</td></tr>').join('') +
     '</tbody></table></div>' + FOOT;

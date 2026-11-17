@@ -1,6 +1,6 @@
 """원자료 → DB 적재용 CSV (data/out/)
 
-license.csv  인허가 전체(2016년 이후 영업한 기록)
+license.csv  인허가 전체(2016년 이후 영업한 기록, 음식점·카페 + 가게형 업종 SOURCES)
 cohort.csv   개업 후 3년이 지난 가게(2016-01-01 이후 개업)의 3년 내 폐업 여부
 area.csv     서울시 상권 영역(위경도, 단순화)
 사용: python -I pipeline/build.py [구 이름 ...]   (생략 시 data/raw 안의 구 전부)
@@ -51,6 +51,36 @@ def svc(biz, kind, name=''):
     if hit: return hit
     if kind == '휴게' and b in ('기타 휴게음식점', ''): return '커피·음료'
     return '기타'
+
+food_svc = lambda kind: (lambda biz, name: svc(biz, kind, name))
+const = lambda v: (lambda biz, name: v)
+def beauty(biz, name):
+    return {'일반미용업': '미용실', '네일아트업': '네일', '피부미용업': '피부관리', '메이크업업': '메이크업'}.get(biz)
+def laundry(biz, name):
+    return '빨래방' if '빨래방' in biz or re.search(r'빨래방|코인', name) else '세탁소'
+def clinic(biz, name):
+    return {'의원': '의원', '치과의원': '치과', '한의원': '한의원'}.get(biz)
+CVS = re.compile(r'지에스|GS ?25|LG25|세븐일레븐|코리아세븐|7-?ELEVEN|씨유|^CU|\bCU\b|비지에프|BGF|이마트 ?24|emart24|위드미|미니스톱|스토리웨이', re.I)
+def tobacco(biz, name):   # 담배소매 인허가로 편의점·슈퍼·전자담배 가게를 본다(그 밖의 가판·문구점 등은 제외)
+    if CVS.search(name): return '편의점'
+    if re.search(r'전자담배|베이프|vape|전담', name, re.I): return '전자담배'
+    if re.search(r'마트|슈퍼|mart', name, re.I): return '슈퍼마켓'
+    return None
+
+# (LOCALDATA slug, 종류, 업종 분류 함수). 업종 이름은 화면 선택지와 같아야 함
+SOURCES = [
+    ('general_restaurants', '음식점', food_svc('음식점')), ('rest_cafes', '휴게', food_svc('휴게')),
+    ('bakeries', '제과점', const('제과')),
+    ('beauty_salons', '미용업', beauty), ('barber_shops', '이용업', const('이발소')), ('laundries', '세탁업', laundry),
+    ('pharmacies', '약국', const('약국')), ('clinics', '의원', clinic), ('optical_shops', '안경업', const('안경점')),
+    ('animal_hospitals', '동물병원', const('동물병원')), ('pet_grooming', '동물미용업', const('반려동물미용')),
+    ('karaoke_rooms', '노래연습장', const('노래방')), ('pc_bangs', 'PC방', const('PC방')),
+    ('billiard_halls', '당구장', const('당구장')), ('fitness_centers', '체력단련장', const('헬스장')),
+    ('martial_arts_dojo', '체육도장', const('체육도장')), ('tobacco_retailers', '담배소매', tobacco),
+]
+FOOD_KINDS = {'음식점', '휴게', '제과점'}
+SIZE_COLS = ('소재지면적', '약국영업면적', '시설면적', '총면적')   # 업종마다 이름이 다름(건축물연면적은 건물 전체라 안 씀)
+LIVE = ('영업', '휴업')   # 그 밖의 상태(취소·말소·제외 등)는 폐업일자가 있으면 그날 닫은 것으로, 없으면 뺀다
 
 FOOD_WORDS = ('음식점', '분식점', '제과점', '주점', '상점', '반점', '식당점', '정육점')
 def is_chain(name):
@@ -121,13 +151,15 @@ def ring_latlon(ring, tol=12.0):
 # ---------- 구별 처리
 def process_gu(gu, areas, idx, wl, wc):
     stores = []
-    for fn, kind in (('general_restaurants.csv', '음식점'), ('rest_cafes.csv', '휴게')):
-        for r in csv.DictReader(open(f'{RAW}/{gu}/{fn}', encoding='cp949', errors='replace')):
+    for slug, kind, svcf in SOURCES:
+        for r in csv.DictReader(open(f'{RAW}/{gu}/{slug}.csv', encoding='cp949', errors='replace')):
             o = d(r['인허가일자'])
             if not o: continue
             status = (r['영업상태명'] or '').strip()
-            c = d(r['폐업일자']) if status.startswith('폐업') else None
+            c = None if status.startswith(LIVE) else d(r.get('폐업일자'))
+            if not c and not status.startswith(LIVE): continue
             if c and c < KEEP_FROM: continue
+            if c and c < o: continue
             lat = lon = area = None
             try:
                 x, y = float(r['좌표정보(X)']), float(r['좌표정보(Y)'])
@@ -136,18 +168,22 @@ def process_gu(gu, areas, idx, wl, wc):
                 area = find_area(areas, idx, X, Y)
             except (ValueError, TypeError):
                 pass
-            sz = (r['소재지면적'] or '').strip()
+            sz = next((r[k].strip() for k in SIZE_COLS if (r.get(k) or '').strip()), '')
             name = (r['사업장명'] or '').strip()
+            biz = (r.get('업태구분명') or '').strip()
             jib, road = (r['지번주소'] or '').strip(), (r['도로명주소'] or '').strip()
-            stores.append(dict(id=r['관리번호'].strip(), gu=gu, kind=kind, name=name, biz=(r['업태구분명'] or '').strip(),
-                               svc=svc(r['업태구분명'], kind, r['사업장명']), open=o, close=c, status=status, jibun=jib, road=road,
+            stores.append(dict(id=r['관리번호'].strip(), gu=gu, kind=kind, name=name, biz=biz or kind,
+                               svc=svcf(biz, name), open=o, close=c, status=status, jibun=jib, road=road,
                                jkey=jkey(jib), size=float(sz) if re.match(r'^[0-9.]+$', sz) and float(sz) > 0 else None,
                                floor=floor_of(road, jib), chain=is_chain(name), lat=lat, lon=lon, area=area))
-    seen = set(); uniq = []
+    seen = {}; uniq = []; clash = 0
     for s in stores:
-        if s['id'] in seen: continue
-        seen.add(s['id']); uniq.append(s)
+        if s['id'] in seen:
+            clash += seen[s['id']] != s['kind']; continue
+        seen[s['id']] = s['kind']; uniq.append(s)
     stores = uniq
+    if clash: print(f'  경고: 서로 다른 종류에서 같은 관리번호 {clash}건(뒤쪽 버림)', flush=True)
+    for s in stores: s['food'] = s['kind'] in FOOD_KINDS
 
     by_name = collections.defaultdict(list); by_jibun = collections.defaultdict(list)
     for s in stores:
@@ -161,7 +197,8 @@ def process_gu(gu, areas, idx, wl, wc):
         return not continued(s)
     def spot(s):
         lo = s['open'] - dt.timedelta(days=HORIZON)
-        return min(2, sum(1 for t in by_jibun[s['jibun']] if t is not s and t['close'] and lo <= t['close'] <= s['open'] and t['name'] != s['name']))
+        return min(2, sum(1 for t in by_jibun[s['jibun']] if t is not s and t['food'] == s['food'] and t['close']   # 외식은 외식끼리, 나머지는 나머지끼리
+                          and lo <= t['close'] <= s['open'] and t['name'] != s['name']))
 
     nc = 0
     for s in stores:
