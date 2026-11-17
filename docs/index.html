@@ -342,7 +342,7 @@ function drawLegend(){
     return;
   }
   const b = BINS[state.y], p = x => Math.round(x*100);
-  $('legend').innerHTML = '<b>'+state.y+'년 생존율</b> · '+esc(state.svc==='전체'?'모든 업종':state.svc)+'<div class="rows">'+
+  $('legend').innerHTML = '<b>'+state.y+'년 생존율</b> · '+esc(state.svc==='전체'?'모든 업종':state.svc)+(LAG_SVC.has(state.svc) ? '<br><span class="muted">'+LAG_NOTE+'</span>' : '')+'<div class="rows">'+
     [['--c5','≥'+p(b[3])+'%'],['--c4',p(b[2])+'~'+p(b[3])+'%'],['--c3',p(b[1])+'~'+p(b[2])+'%'],['--c2',p(b[0])+'~'+p(b[1])+'%'],['--c1','<'+p(b[0])+'%'],['--cna','표본 부족']]
     .map(([c,t]) => '<i style="background:'+css(c)+'"></i>'+t).join('<br>') + dotKey(false) + '</div>';
 }
@@ -434,10 +434,13 @@ function svcTable(rows, minO){
     .map(r => ({...r, r3: r.o3 ? r.s3/r.o3 : 0})).sort((a,b) => (b.o3>=minO) - (a.o3>=minO) || b.r3 - a.r3);
   if(!list.length) return '<p class="note">업종별로 나눌 만큼 기록이 없습니다.</p>';
   return '<div class="tblwrap"><table><thead><tr><th>업종</th><th class="r">1년</th><th class="r">2년</th><th class="r">3년</th><th class="col-bar" style="width:70px"></th><th class="r">3년 표본</th></tr></thead><tbody>' +
-    list.map(r => '<tr class="'+(r.o3 < minO ? 'thin' : '')+'"><td>'+esc(r.svc === '기타' ? '외식 기타(분류 어려움)' : r.svc)+'</td><td class="r num">'+pct(r.s1,r.o1)+'</td><td class="r num">'+pct(r.s2,r.o2)+'</td><td class="r num"><b>'+pct(r.s3,r.o3)+'</b></td>'+
+    list.map(r => '<tr class="'+(r.o3 < minO ? 'thin' : '')+'"><td>'+esc(r.svc === '기타' ? '외식 기타(분류 어려움)' : r.svc)+(LAG_SVC.has(r.svc) ? '<sup>*</sup>' : '')+'</td><td class="r num">'+pct(r.s1,r.o1)+'</td><td class="r num">'+pct(r.s2,r.o2)+'</td><td class="r num"><b>'+pct(r.s3,r.o3)+'</b></td>'+
       '<td class="col-bar"><div class="bar"><i style="width:'+(r.r3*100).toFixed(0)+'%;background:'+color3(r.r3)+'"></i></div></td><td class="r num note">'+fmt(r.o3)+'</td></tr>').join('') +
-    '</tbody></table></div><p class="note">흐린 줄은 3년 관찰 가게가 '+minO+'곳 미만이라 참고만 하세요.</p>';
+    '</tbody></table></div><p class="note">흐린 줄은 3년 관찰 가게가 '+minO+'곳 미만이라 참고만 하세요.' +
+    (list.some(r => LAG_SVC.has(r.svc)) ? '<br><sup>*</sup> '+LAG_NOTE : '') + '</p>';
 }
+const LAG_SVC = new Set(['헬스장','노래방','체육도장','당구장']);
+const LAG_NOTE = '체육·오락시설은 문을 닫고도 폐업 신고가 늦거나 빠지는 경우가 있어, 생존율이 실제보다 높게 나올 수 있습니다.';
 function lifeTag(x){
   if(!x.close_date) return '<span class="tag live">영업 중</span>';
   const d = x.life_days; if(d == null) return '<span class="tag old">명의변경</span>';
