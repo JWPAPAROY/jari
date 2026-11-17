@@ -383,20 +383,24 @@ function drawAreas(){
     poly.addTo(areaLayer);
   }
 }
-let bldTimer = null;
+let bldTimer = null, bldTok = 0;
 async function drawBuildings(){
   bldLayer.clearLayers();
+  const tok = ++bldTok;
   if(map.getZoom() < 16) return;
   const b = map.getBounds();
-  const rows = await rpc('buildings_in_view', {min_lat:b.getSouth(), min_lon:b.getWest(), max_lat:b.getNorth(), max_lon:b.getEast()});
-  for(const r of rows){
+  const raw = await rpc('buildings_view', {min_lat:b.getSouth(), min_lon:b.getWest(), max_lat:b.getNorth(), max_lon:b.getEast()});
+  if(tok !== bldTok) return;
+  bldLayer.clearLayers();
+  for(const [jkey, lat, lon, n, n_open, o3, s3] of raw){
+    const r = {jkey, lat, lon, n, n_open, o3, s3};
     const o = r['o3'], s = r['s3'];
     const rate = o >= MIN_BLD ? s/o : null;
     const c = rate == null
-      ? L.circleMarker([r.lat, r.lon], {radius: 3, stroke:false, fillColor: color3(null), fillOpacity:.55})
+      ? L.circleMarker([r.lat, r.lon], {radius: 4, color:'#fff', weight:1, fillColor: color3(null), fillOpacity:.85})
       : L.circleMarker([r.lat, r.lon], {radius: 4 + Math.min(8, Math.sqrt(r.n)*1.6), color:'#fff', weight:1, fillColor: color3(rate), fillOpacity:.92});
     c.on('click', e => { L.DomEvent.stopPropagation(e); showBuilding(r.jkey); });
-    c.bindTooltip(esc(r.jkey.split('|')[1]) + ' · 가게 ' + r.n + '곳' + (rate!=null ? ' · 3년 생존 ' + Math.round(rate*100) + '%' : ''));
+    c.bindTooltip(esc(r.jkey.split('|')[1]) + ' · 가게 ' + r.n + '곳' + (rate!=null ? ' · 3년 생존 ' + Math.round(rate*100) + '%' : ' · 3년 지난 가게 ' + (o||0) + '곳(생존율 계산엔 ' + MIN_BLD + '곳 필요)'));
     c.addTo(bldLayer);
   }
 }
