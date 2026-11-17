@@ -21,6 +21,8 @@ for name in ('license', 'cohort'):
         with open(f'data/tmp/{name}.{gu}.csv', 'w', encoding='utf-8', newline='') as fh: csv.writer(fh).writerows(rows)
 PY
 
+# 보조 인덱스는 적재 동안 내려 둔다(구마다 지우고 넣으면 인덱스가 두 배로 부풀어 무료 한도에 닿음, 2026-11-17 124MB)
+bash ./db.sh -q -c "drop index if exists license_jkey, license_gu_open, license_latlon, license_area"
 for f in $T/license.*.csv; do
   gu=${f#$T/license.}; gu=${gu%.csv}
   [ -f "$T/cohort.$gu.csv" ] || : > "$T/cohort.$gu.csv"
@@ -54,7 +56,20 @@ insert into meta values ('build', '$META'::jsonb, now()) on conflict (key) do up
 select refresh_stats();
 commit;
 SQL
+cat > $T/index.sql <<'SQL'
+set statement_timeout = 0;
+create index if not exists license_jkey on license (jkey);
+create index if not exists license_gu_open on license (gu, open_date);
+create index if not exists license_latlon on license (lat, lon);
+create index if not exists license_area on license (area_code);
+SQL
+bash ./db.sh -q -f $T/index.sql   # refresh_stats 전에 다시 만들어야 집계가 빠름
 bash ./db.sh -q -f $T/load_rest.sql
 bash ./db.sh -q -c "set statement_timeout = 0" -c "vacuum analyze license" -c "vacuum analyze cohort" -c "vacuum analyze building" -c "vacuum analyze area_stats"
 bash ./db.sh -tAc "select 'license '||count(*) from license union all select 'cohort '||count(*) from cohort union all select 'area '||count(*) from area"
 echo "끝 db $(size)"
+# 남은 인덱스(기본키 등) 부풂 정리: 한 번에 하나씩 다시 만들어 최대 용량을 작게
+for ix in $(bash ./db.sh -tAc "select indexrelid::regclass from pg_index where indrelid in ('license'::regclass,'cohort'::regclass,'building'::regclass) order by pg_relation_size(indexrelid)"); do
+  bash ./db.sh -q -c "set statement_timeout = 0" -c "reindex index $ix"
+done
+echo "인덱스 정리 후 db $(size)"
