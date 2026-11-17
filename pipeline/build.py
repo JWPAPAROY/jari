@@ -149,6 +149,7 @@ def ring_latlon(ring, tol=12.0):
     return out
 
 # ---------- 구별 처리
+SEEN_ALL = set()   # 서울 전체 관리번호(구 사이 중복 방지)
 def process_gu(gu, areas, idx, wl, wc):
     stores = []
     for slug, kind, svcf in SOURCES:
@@ -176,13 +177,18 @@ def process_gu(gu, areas, idx, wl, wc):
                                svc=svcf(biz, name), open=o, close=c, status=status, jibun=jib, road=road,
                                jkey=jkey(jib), size=float(sz) if re.match(r'^[0-9.]+$', sz) and float(sz) > 0 else None,
                                floor=floor_of(road, jib), chain=is_chain(name), lat=lat, lon=lon, area=area))
-    seen = {}; uniq = []; clash = 0
+    seen = {}; uniq = []; clash = other = 0
     for s in stores:
         if s['id'] in seen:
             clash += seen[s['id']] != s['kind']; continue
+        # 구를 옮긴 가게는 두 구 파일에 같은 관리번호로 나온다 → 주소가 다른 구면 빼고, 그래도 겹치면 먼저 본 구가 가짐
+        a = s['jibun'] or s['road']
+        if (a and re.search(r'\S+구', a) and gu not in a) or s['id'] in SEEN_ALL:
+            other += 1; continue
         seen[s['id']] = s['kind']; uniq.append(s)
-    stores = uniq
+    stores = uniq; SEEN_ALL.update(seen)
     if clash: print(f'  경고: 서로 다른 종류에서 같은 관리번호 {clash}건(뒤쪽 버림)', flush=True)
+    if other: print(f'  다른 구 주소·중복 {other}건 제외', flush=True)
     for s in stores: s['food'] = s['kind'] in FOOD_KINDS
 
     by_name = collections.defaultdict(list); by_jibun = collections.defaultdict(list)
