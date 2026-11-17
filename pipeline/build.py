@@ -150,6 +150,8 @@ def ring_latlon(ring, tol=12.0):
 
 # ---------- 구별 처리
 SEEN_ALL = set()   # 서울 전체 관리번호(구 사이 중복 방지)
+# 관리번호가 구마다 따로 매겨지는 업종(강남·마포에 같은 번호의 다른 가게가 수백 개) → 구 이름을 붙여 구분
+GU_LOCAL_ID = {'karaoke_rooms', 'pc_bangs', 'billiard_halls', 'fitness_centers', 'martial_arts_dojo'}
 def process_gu(gu, areas, idx, wl, wc):
     stores = []
     for slug, kind, svcf in SOURCES:
@@ -173,22 +175,26 @@ def process_gu(gu, areas, idx, wl, wc):
             name = (r['사업장명'] or '').strip()
             biz = (r.get('업태구분명') or '').strip()
             jib, road = (r['지번주소'] or '').strip(), (r['도로명주소'] or '').strip()
-            stores.append(dict(id=r['관리번호'].strip(), gu=gu, kind=kind, name=name, biz=biz or kind,
+            mid = r['관리번호'].strip()
+            if slug in GU_LOCAL_ID: mid = f'{gu}:{mid}'
+            stores.append(dict(id=mid, gu=gu, kind=kind, name=name, biz=biz or kind,
                                svc=svcf(biz, name), open=o, close=c, status=status, jibun=jib, road=road,
                                jkey=jkey(jib), size=float(sz) if re.match(r'^[0-9.]+$', sz) and float(sz) > 0 else None,
                                floor=floor_of(road, jib), chain=is_chain(name), lat=lat, lon=lon, area=area))
-    seen = {}; uniq = []; clash = other = 0
+    seen = {}; uniq = []; clash = other = dup = 0
     for s in stores:
         if s['id'] in seen:
             clash += seen[s['id']] != s['kind']; continue
-        # 구를 옮긴 가게는 두 구 파일에 같은 관리번호로 나온다 → 주소가 다른 구면 빼고, 그래도 겹치면 먼저 본 구가 가짐
+        # 주소가 다른 지역(다른 구·다른 시)인 기록은 뺀다. 그래도 구 사이에 번호가 겹치면 먼저 본 구가 가짐
         a = s['jibun'] or s['road']
-        if (a and re.search(r'\S+구', a) and gu not in a) or s['id'] in SEEN_ALL:
+        if a and re.search(r'\S+[구시]\s', a) and gu not in a:
             other += 1; continue
+        if s['id'] in SEEN_ALL:
+            dup += 1; continue
         seen[s['id']] = s['kind']; uniq.append(s)
     stores = uniq; SEEN_ALL.update(seen)
     if clash: print(f'  경고: 서로 다른 종류에서 같은 관리번호 {clash}건(뒤쪽 버림)', flush=True)
-    if other: print(f'  다른 구 주소·중복 {other}건 제외', flush=True)
+    if other or dup: print(f'  다른 지역 주소 {other}건 · 다른 구와 번호 중복 {dup}건 제외', flush=True)
     for s in stores: s['food'] = s['kind'] in FOOD_KINDS
 
     by_name = collections.defaultdict(list); by_jibun = collections.defaultdict(list)

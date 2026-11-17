@@ -6,6 +6,7 @@ QS=$(cat data/out/trend_quarters.txt | tr ' ' ',')
 [ -n "$QS" ] || { echo "받은 분기 없음"; exit 0; }
 mkdir -p data/tmp
 cat > data/tmp/load_trend.sql <<SQL
+set statement_timeout = 0;
 begin;
 delete from area_q where q in ($QS);
 delete from area_sales where q in ($QS);
