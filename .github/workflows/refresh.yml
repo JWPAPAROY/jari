@@ -21,6 +21,12 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - name: 실거래 원자료 캐시(지난 달 것은 다시 받지 않음)
+        uses: actions/cache@v4
+        with:
+          path: data/raw/house
+          key: house-${{ github.run_id }}
+          restore-keys: house-
       - name: Install psql
         run: sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client
       - name: Fetch
