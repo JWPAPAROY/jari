@@ -44,7 +44,7 @@ begin
   out := jsonb_build_object(
     'title', (select coalesce(jsonb_agg(jsonb_build_object('kind', x->>'regstrKindCdNm', 'dong', nullif(trim(x->>'dongNm'), ''), 'cd', x->>'mainPurpsCd', 'nm', x->>'mainPurpsCdNm',
                'etc', nullif(trim(x->>'etcPurps'), ''), 'area', (x->>'totArea')::real, 'hhld', (x->>'hhldCnt')::int, 'fmly', (x->>'fmlyCnt')::int, 'ho', (x->>'hoCnt')::int,
-               'grnd', (x->>'grndFlrCnt')::int, 'ugrnd', (x->>'ugrndFlrCnt')::int, 'apr', nullif(trim(x->>'useAprDay'), ''))), '[]') from jsonb_array_elements(t) x),
+               'strct', nullif(trim(coalesce(x->>'strctCdNm', '') || ' ' || coalesce(x->>'etcStrct', '')), ''), 'roof', nullif(trim(coalesce(x->>'roofCdNm', '') || ' ' || coalesce(x->>'etcRoof', '')), ''), 'grnd', (x->>'grndFlrCnt')::int, 'ugrnd', (x->>'ugrndFlrCnt')::int, 'apr', nullif(trim(x->>'useAprDay'), ''))), '[]') from jsonb_array_elements(t) x),
     'floors', (select coalesce(jsonb_agg(jsonb_build_object('dong', nullif(trim(x->>'dongNm'), ''), 'gb', x->>'flrGbCdNm', 'no', (x->>'flrNo')::int, 'flr', x->>'flrNoNm',
                'cd', x->>'mainPurpsCd', 'nm', x->>'mainPurpsCdNm', 'etc', nullif(trim(x->>'etcPurps'), ''), 'area', (x->>'area')::real, 'main', x->>'mainAtchGbCd' = '0')
                order by x->>'dongNm', x->>'flrGbCd' desc, (x->>'flrNo')::int desc), '[]') from jsonb_array_elements(f) x),
