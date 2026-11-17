@@ -64,6 +64,7 @@ th,td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:left;white
 tr:last-child td{border-bottom:0}.up{color:var(--safe)}.dn{color:var(--risk)}
 a{color:var(--accent)}.btn{display:inline-block;background:var(--accent);color:var(--panel);padding:10px 16px;border-radius:8px;text-decoration:none;font-weight:700;margin:8px 0}
 .links{display:flex;flex-wrap:wrap;gap:6px}.links a{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:4px 10px;text-decoration:none;font-size:14px}
+.wrap td,.wrap th{white-space:normal;min-width:110px}ul,ol{padding-left:22px}li{margin:4px 0}
 footer{color:var(--muted);font-size:13px;margin-top:36px;border-top:1px solid var(--line);padding-top:12px}
 @media (max-width:520px){h1{font-size:21px}.card b{font-size:20px}.card{padding:10px}}"""
 
@@ -245,6 +246,12 @@ page('stay.html', '서울 외국인 민박(에어비앤비) 동별 현황 | jari
      f'<div class="tw"><table><thead><tr><th>행정동</th><th class="r">영업</th><th class="r">1년 신규</th><th class="r">3년 생존</th><th class="r">밤 외국인</th></tr></thead><tbody>{"".join(lrow(d) for d in ld)}</tbody></table></div>',
      'list', 'stay.html', SRC_STAY)
 urls.append('stay.html')
+# 숙박 업종별 법령 정리(원문 확인일은 본문에 적음, 법령이 바뀌면 stay_law_body.html을 고친다)
+page('stay-law.html', '서울 에어비앤비·공유숙박 업종별 법령 정리(도시민박·한옥체험업·숙박업) | jari',
+     '외국인관광 도시민박업, 한옥체험업, 숙박업, 호스텔의 등록기준과 서울 용도지역별 숙박시설 제한, 월세로 빌려서 할 때 주의점을 법령 원문으로 정리.',
+     open(os.path.join(os.path.dirname(__file__), 'stay_law_body.html'), encoding='utf-8').read(), 'list', 'stay-law.html',
+     '자료: 국가법령정보센터 현행 법령·자치법규 원문.')
+urls.append('stay-law.html')
 
 today = dt.date.today().isoformat()
 with open(f'{DOCS}/sitemap.xml', 'w', encoding='utf-8', newline='\n') as fh:
