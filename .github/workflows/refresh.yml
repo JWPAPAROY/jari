@@ -33,6 +33,7 @@ jobs:
           PSQL: psql
         run: bash pipeline/load.sh
       - name: Trend (서울시 상권분석 매출·인구, 새 분기만)
+        continue-on-error: true   # 이 단계가 실패해도 나머지 자료와 정적 페이지는 갱신
         env:
           JARI_DB_PASSWORD: ${{ secrets.JARI_DB_PASSWORD }}
           SEOUL_API_KEY: ${{ secrets.SEOUL_API_KEY }}
@@ -42,6 +43,7 @@ jobs:
           python -I pipeline/fetch_trend.py $HAVE
           bash pipeline/load_trend.sh
       - name: Academy (서울시 학원·교습소, 사라진 곳은 폐원 기록)
+        continue-on-error: true   # 이 단계가 실패해도 나머지 자료와 정적 페이지는 갱신
         env:
           JARI_DB_PASSWORD: ${{ secrets.JARI_DB_PASSWORD }}
           SEOUL_API_KEY: ${{ secrets.SEOUL_API_KEY }}
@@ -49,12 +51,14 @@ jobs:
           PSQL: psql
         run: bash pipeline/load_academy.sh
       - name: Rent (한국부동산원 임대료·공실률, 분기)
+        continue-on-error: true   # 이 단계가 실패해도 나머지 자료와 정적 페이지는 갱신
         env:
           JARI_DB_PASSWORD: ${{ secrets.JARI_DB_PASSWORD }}
           RONE_KEY: ${{ secrets.RONE_KEY }}
           PSQL: psql
         run: bash pipeline/load_rent.sh
       - name: Stay (외국인 민박·숙박 인허가, 단기체류 외국인 생활인구)
+        continue-on-error: true   # 이 단계가 실패해도 나머지 자료와 정적 페이지는 갱신
         env:
           JARI_DB_PASSWORD: ${{ secrets.JARI_DB_PASSWORD }}
           SEOUL_API_KEY: ${{ secrets.SEOUL_API_KEY }}

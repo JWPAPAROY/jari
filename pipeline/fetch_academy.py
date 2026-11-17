@@ -53,15 +53,20 @@ if __name__ == '__main__':
     rows = academies()
     print(f'학원·교습소 {len(rows):,}곳, 좌표 캐시 {len(cache):,}', flush=True)
     areas = build.load_areas(); idx = build.grid_index(areas)
-    new, miss, calls = {}, 0, 0
+    new, miss, calls, fails = {}, 0, 0, 0
     os.makedirs(OUT, exist_ok=True)
     with open(f'{OUT}/academy.csv', 'w', encoding='utf-8', newline='') as fh:
         w = csv.writer(fh)
         for r in rows:
             addr = (r.get('ROAD_NM_ADDR') or '').strip()
             ll = cache.get(addr) or new.get(addr)
-            if not ll and addr and VW and calls < MAX_GEO:
-                calls += 1; ll = geocode(addr); time.sleep(0.05)
+            if not ll and addr and VW and calls < MAX_GEO and fails < 5:
+                calls += 1
+                try: ll = geocode(addr); fails = 0
+                except RuntimeError as e:   # 브이월드가 잠깐 막혀도 학원 목록은 갱신(좌표만 다음 주로 미룸)
+                    ll = None; fails += 1
+                    if fails == 5: print(f'브이월드 연속 실패로 이번엔 새 좌표를 그만 받음: {e}', flush=True)
+                time.sleep(0.05)
                 if ll: new[addr] = ll
             area = ''
             if ll:
