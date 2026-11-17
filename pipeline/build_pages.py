@@ -38,6 +38,9 @@ for r in rd('open'): openn[r['code']][r['svc']] = i(r['n'])
 trend = {r['code']: r for r in rd('trend')}
 acad = {r['code']: r for r in rd('acad')}
 built = open(f'{T}/p_built.txt', encoding='utf-8').read().strip()
+rent = collections.defaultdict(dict)   # 상권 → {(종류, 분기): 행}
+for r in rd('rent'): rent[r['code']][(r['kind'], int(r['q']))] = r
+RQ = max((q for v in rent.values() for _, q in v), default=0)
 
 def near(code, k=6):
     a = areas[code]
@@ -78,7 +81,7 @@ def page(path, title, desc, body, kind, canon):
 <meta property="og:title" content="{e(title)}"><meta property="og:description" content="{e(desc)}"><meta property="og:type" content="website">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;700&family=IBM+Plex+Mono:wght@500;600&display=swap">
 <link rel="stylesheet" href="{'../' if '/' in path else ''}p.css?v={CSS_V}"></head><body><header><a href="{'../' if '/' in path else ''}./">jari · 창업 자리 생존율 지도</a></header><main>{body}
-<footer>자료: 행정안전부 LOCALDATA 인허가, 서울시 상권분석서비스(상권 영역·추정매출), 서울시 학원·교습소 정보. 생존율은 2016년 이후 문을 연 가게 중 개업 후 N년이 지난 가게가 그 시점에 영업 중이었던 비율입니다. {e(built)} 기준.</footer>
+<footer>자료: 행정안전부 LOCALDATA 인허가, 서울시 상권분석서비스(상권 영역·추정매출), 서울시 학원·교습소 정보, 한국부동산원 상업용부동산 임대동향. 생존율은 2016년 이후 문을 연 가게 중 개업 후 N년이 지난 가게가 그 시점에 영업 중이었던 비율입니다. {e(built)} 기준.</footer>
 </main>{track}</body></html>"""
     os.makedirs(os.path.dirname(f'{DOCS}/{path}') or DOCS, exist_ok=True)
     open(f'{DOCS}/{path}', 'w', encoding='utf-8', newline='\n').write(doc)
@@ -130,6 +133,21 @@ for code, a in areas.items():
         body += f'<h2>지금 영업 중인 가게 {tot:,}곳</h2><p>' + ' · '.join(f'{e(SVL(s))} <b class="num">{n}</b>' for s, n in on[:12]) + '</p>'
     if ac and i(ac['n']):
         body += f'<h2>학원·교습소 {i(ac["n"]):,}곳</h2><p>' + e(ac['fields']) + '</p>'
+    rv = rent.get(code)
+    if rv and RQ:
+        trs = []
+        for k in ('소규모', '중대형'):
+            now, prev = rv.get((k, RQ)), rv.get((k, RQ - 10))
+            if not now or not now['rent']: continue
+            ch = (float(now['rent']) / float(prev['rent']) - 1) * 100 if prev and prev['rent'] else None
+            trs.append(f'<tr><td>{k} 상가</td><td class="r num"><b>{float(now["rent"]) * 3.3058 / 10:.1f}만원</b></td>'
+                       f'<td class="r num">{"—" if ch is None else f"{ch:+.1f}%"}</td><td class="r num">{float(now["vac"]):.1f}%</td></tr>' if now['vac'] else
+                       f'<tr><td>{k} 상가</td><td class="r num"><b>{float(now["rent"]) * 3.3058 / 10:.1f}만원</b></td><td class="r num">{"—" if ch is None else f"{ch:+.1f}%"}</td><td class="r num">—</td></tr>')
+        if trs:
+            reg = next(iter(rv.values()))['region']
+            body += (f'<h2>임대료·공실률</h2><p class="sub">가까운 한국부동산원 조사 상권 <b>{e(reg)}</b> · {str(RQ)[:4]}년 {str(RQ)[4]}분기</p>'
+                     '<div class="tw"><table><thead><tr><th></th><th class="r">평당 월세</th><th class="r">1년 변화</th><th class="r">공실률</th></tr></thead><tbody>'
+                     + ''.join(trs) + '</tbody></table></div>')
     nb = near(code)
     if nb:
         body += '<h2>가까운 상권</h2><div class="links">' + ''.join(f'<a href="{c}.html">{e(areas[c]["name"])}</a>' for c in nb) + '</div>'

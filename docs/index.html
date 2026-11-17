@@ -911,6 +911,32 @@ function readLink(){
   const m = decodeURIComponent(location.hash || '').match(/^#([ab])=([^&]+)(?:&s=(.+))?$/);
   return m ? {k:m[1], id:m[2], s:m[3] || null} : null;
 }
+// ---------- 임대료·공실률(한국부동산원 표본조사, 가까운 조사 상권 값)
+async function fillRent(tok, code){
+  const [ar] = await rest('area_rent?select=region,dist&code=eq.' + encodeURIComponent(code)).catch(() => []);
+  if(!ar || tok !== panelTok) return;
+  const rows = await rest('rent?select=region,q,kind,rent,vac&region=in.(' + encodeURIComponent('"' + ar.region + '","서울"') + ')&order=q').catch(() => []);
+  const el = $('rn'); if(tok !== panelTok || !el || !rows.length) return;
+  const mine = rows.filter(r => r.region === ar.region); if(!mine.length) return;
+  const last = Math.max(...mine.map(r => r.q));
+  const get = (reg, q, k) => rows.find(r => r.region === reg && r.q === q && r.kind === k);
+  const py = v => (v * 3.3058 / 10).toFixed(1);   // 천원/㎡ → 만원/평
+  const lines = ['소규모', '중대형'].map(k => {
+    const now = get(ar.region, last, k); if(!now || now.rent == null) return '';
+    const prev = get(ar.region, last - 10, k), se = get('서울', last, k);
+    const ch = prev && prev.rent ? (now.rent / prev.rent - 1) * 100 : null;
+    return '<tr><td>' + k + ' 상가</td><td class="r num"><b>' + py(now.rent) + '만원</b></td>' +
+      '<td class="r num">' + (ch == null ? '—' : (ch >= 0 ? '+' : '') + ch.toFixed(1) + '%') + '</td>' +
+      '<td class="r num">' + (now.vac == null ? '—' : now.vac.toFixed(1) + '%') + '</td>' +
+      '<td class="r num note">' + (se && se.vac != null ? se.vac.toFixed(1) + '%' : '—') + '</td></tr>';
+  }).join('');
+  if(!lines) return;
+  const small = get(ar.region, last, '소규모');
+  el.innerHTML = '<h2>임대료·공실률 <span class="note">· 가까운 조사 상권 <b>' + esc(ar.region) + '</b>' + (ar.dist > 300 ? '(' + fmt(Math.round(ar.dist / 100) * 100) + 'm)' : '') + ' · ' + qlab(last) + '</span></h2>' +
+    '<div class="tblwrap"><table><thead><tr><th></th><th class="r">평당 월세</th><th class="r">1년 변화</th><th class="r">공실률</th><th class="r">서울 공실률</th></tr></thead><tbody>' + lines + '</tbody></table></div>' +
+    (small && small.rent ? '<p class="note" style="margin:6px 0 0">소규모 상가 기준으로 10평이면 월 약 <b>' + Math.round(small.rent * 33.058 / 10) + '만원</b>, 20평이면 약 <b>' + Math.round(small.rent * 66.116 / 10) + '만원</b>입니다. 한국부동산원 표본조사 평균이라 층·위치에 따라 실제 시세와 차이가 큽니다.</p>' : '');
+}
+
 // ---------- 학원·교습소(서울시 자료: 지금 등록된 곳만, 폐원은 매주 비교로 기록 중)
 async function fillAcademy(tok, args, jkey, where){
   const [st, list] = await Promise.all([
@@ -941,10 +967,10 @@ async function showArea(code){
     survBlock(all, '이 상권 전체') + '<div id="tk"></div>' +
     (best ? '<p class="note" style="margin-top:10px">이 상권에서 3년을 가장 잘 버틴 업종은 <b>'+esc(best.svc)+'</b>('+pct(best.s3,best.o3)+', '+best.o3+'곳 중)입니다.</p>' : '') +
     '<div id="tr"><p class="loading">매출·유동인구 흐름 불러오는 중…</p></div>' +
-    '<h2>업종별 생존율</h2>' + svcTable(rows, 10) + '<div id="dt"><p class="loading">조건별 통계 불러오는 중…</p></div><div id="ac"></div>' + FOOT;
+    '<div id="rn"></div><h2>업종별 생존율</h2>' + svcTable(rows, 10) + '<div id="dt"><p class="loading">조건별 통계 불러오는 중…</p></div><div id="ac"></div>' + FOOT;
   if(a.lat) map.flyTo([a.lat, a.lon], Math.max(map.getZoom(), 15), {duration:.6});
   toPanel();
-  fillAcademy(tok, {p_lat:0, p_lon:0, p_r:0, p_area:code}, null, '이 상권');
+  fillAcademy(tok, {p_lat:0, p_lon:0, p_r:0, p_area:code}, null, '이 상권'); fillRent(tok, code);
   const sv = trendSvc();
   const [d, tr] = await Promise.all([
     rpc('place_detail', {p_lat:0, p_lon:0, p_r:0, p_svc:state.svc, p_area:code}).catch(() => null),
@@ -988,7 +1014,7 @@ async function showBuilding(jkey){
     survBlock(b, '이 건물에서 문 연 가게') +
     (b.o1 < 5 ? '<p class="warn">이 건물은 기록이 적어 숫자가 크게 흔들립니다. 아래 주변·상권 수치를 함께 보세요.</p>' : '') +
     '<p class="note" style="margin-top:8px">지금 영업 중 <b>'+b.n_open+'</b>곳 · 최근 3년 사이 폐업 <b>'+recent+'</b>건</p>' +
-    '<div id="tk"><p class="loading">땅값·주변 흐름 분석 중…</p></div>' +
+    '<div id="tk"><p class="loading">땅값·주변 흐름 분석 중…</p></div><div id="rn"></div>' +
     '<h2>주변과 비교</h2><div class="tblwrap"><table><thead><tr><th></th><th class="r">1년</th><th class="r">2년</th><th class="r">3년</th><th class="r">3년 표본</th></tr></thead><tbody>' +
       cmp('이 건물', b) + cmp('반경 300m', nearAll) + (area[0] ? cmp('상권 전체', area[0]) : '') + '</tbody></table></div>' +
     '<h2>땅·건물</h2><div id="land"><p class="loading">브이월드에서 불러오는 중…</p></div>' +
@@ -1005,7 +1031,7 @@ async function showBuilding(jkey){
   setMarker(b.lat, b.lon);
   map.flyTo([b.lat, b.lon], Math.max(map.getZoom(), 17), {duration:.6});
   toPanel();
-  fillAcademy(tok, {p_lat:b.lat, p_lon:b.lon, p_r:300}, jkey, '반경 300m');
+  fillAcademy(tok, {p_lat:b.lat, p_lon:b.lon, p_r:300}, jkey, '반경 300m'); if(b.area_code) fillRent(tok, b.area_code);
   const [L, d] = await Promise.all([landP, detP]);
   if(tok !== panelTok) return;
   $('land').innerHTML = landHtml(L);

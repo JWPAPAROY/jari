@@ -48,6 +48,12 @@ jobs:
           VWORLD_KEY: ${{ secrets.VWORLD_KEY }}
           PSQL: psql
         run: bash pipeline/load_academy.sh
+      - name: Rent (한국부동산원 임대료·공실률, 분기)
+        env:
+          JARI_DB_PASSWORD: ${{ secrets.JARI_DB_PASSWORD }}
+          RONE_KEY: ${{ secrets.RONE_KEY }}
+          PSQL: psql
+        run: bash pipeline/load_rent.sh
       - name: Pages (상권·구 정적 페이지, sitemap)
         env:
           JARI_DB_PASSWORD: ${{ secrets.JARI_DB_PASSWORD }}

@@ -12,6 +12,7 @@ set statement_timeout = 0;
 \copy (select code, grade, sales_yoy from area_trend where svc = '전체') to 'data/tmp/p_trend.csv' with (format csv, header true)
 \copy (select area_code code, sum(k) n, string_agg(f || ' ' || k, ' · ' order by k desc) fields from (select area_code, coalesce(nullif(field,''),'기타') f, count(*) k from academy where closed_on is null and area_code is not null group by 1, 2) x group by 1) to 'data/tmp/p_acad.csv' with (format csv, header true)
 \copy (select coalesce(value->>'built', '') from meta where key = 'build') to 'data/tmp/p_built.txt'
+\copy (select ar.code, ar.region, ar.dist, r.kind, r.q, r.rent, r.vac from area_rent ar join rent r on r.region = ar.region where r.q in ((select max(q) from rent), (select max(q) from rent) - 10)) to 'data/tmp/p_rent.csv' with (format csv, header true)
 SQL
 bash ./db.sh -q -f data/tmp/pages_export.sql
 python -I pipeline/build_pages.py
