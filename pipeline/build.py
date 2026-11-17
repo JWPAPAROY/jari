@@ -219,7 +219,8 @@ def process_gu(gu, areas, idx, wl, wc):
     nc = 0
     for s in stores:
         wl.writerow([s['id'], gu, s['kind'], s['name'], s['biz'], s['svc'] or '', s['open'], s['close'] or '',
-                     s['status'], '', road_short(s['road']), s['jkey'] or '',   # 용량: 지번 원문은 안 씀(jkey로 대신), 도로명은 건물번호까지만 s['size'] or '', s['floor'],
+                     # 용량: 지번 원문은 안 씀(jkey로 대신), 도로명은 건물번호까지만
+                     s['status'], '', road_short(s['road']), s['jkey'] or '', s['size'] or '', s['floor'],
                      't' if s['chain'] else 'f', s['lat'] or '', s['lon'] or '', s['area'] or '',
                      (s['close'] - s['open']).days if s['close'] and not continued(s) else '',
                      'f' if continued(s) else 't'])
